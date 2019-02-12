@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Jan 24 11:46:45 2019
-
 This script aims to implement image clustering, segmentation technique
 to achieve the feetTracking function
-
 @author: jschang
 """
 
@@ -97,8 +95,8 @@ IS_DEBUG = False
 
 
 # .bag file location
-FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\feetTest1.bag"
-#FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\d415_1500.bag"
+#FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\feetTest1.bag"
+FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\d415_1500.bag"
 
 
 # Create the context object that holds the handle of all the connected devices
@@ -110,7 +108,8 @@ cfg = rs.config()
 # Tell config that we will use a recorded device from filem to be used by the pipeline through playback.
 rs.config.enable_device_from_file(cfg, FILE_LOC)
 # Configure the pipeline to stream the depth stream (resolution, format, and frame rate)
-cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+#cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+cfg.enable_stream(rs.stream.depth, 640, 360, rs.format.z16, 60)
 
 # Start streaming from file and obtain the returned profile
 profile = pipeline.start(cfg)
@@ -152,6 +151,10 @@ out = np.empty((h, w, 3), dtype=np.uint8)
 
 
 while True:
+    
+    # Render
+    now = time.time()
+    
     # Grab camera data
     if not state.paused:
         # Get the frames from pipeline
@@ -205,7 +208,7 @@ while True:
         # Create the Voxel Grid Filter Object
         vox = oriCloud.make_voxel_grid_filter()
         # Choose the voxel (leaf) size
-        LEAF_SIZE = 0.005
+        LEAF_SIZE = 0.0045
         # Set the voxel size on the vox object
         vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
         
@@ -251,7 +254,7 @@ while True:
         FILTER_AXIS = 'z'
         passthrough.set_filter_field_name(FILTER_AXIS)
         AXIS_MIN = 0
-        AXIS_MAX = 0.6
+        AXIS_MAX = 0.68
         passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
             
         # Call the passthrough filter to obtain the resultant pointcloud
@@ -291,10 +294,10 @@ while True:
     
         # Set the model you wish to fit
         seg.set_model_type(pcl.SACMODEL_PLANE)
-        #seg.set_model_type(pcl.SAC_RANSAC)
+        seg.set_model_type(pcl.SAC_RANSAC)
                            
         # Max distance for the point to be consider fitting this model
-        max_distance = 0.015
+        max_distance = 0.02
         seg.set_distance_threshold(max_distance)
     
         # Obtain a set of inlier indices ( who fit the plane) and model coefficients
@@ -376,8 +379,7 @@ while True:
     # Point Cloud Visuzalization #
     ##############################
     
-    # Render
-    now = time.time()
+
 
     out.fill(0)
 
