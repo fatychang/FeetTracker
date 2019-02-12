@@ -93,7 +93,7 @@ def mouse_cb(event, x, y, flags, param):
 # Flag setting
 SAVE_IMAGE = False
 IS_DEBUG = False
-IS_DISPLAY = False
+
 
 
 # .bag file location
@@ -150,20 +150,7 @@ out = np.empty((h, w, 3), dtype=np.uint8)
 #    Stream loop      #
 #######################
 
-# Extract a paticular frame
-#ctr=0
-#NUM_OF_FRAMES = 75
-#while ctr < NUM_OF_FRAMES:
-#    # Get the frames from pipeline
-#    frames = pipeline.wait_for_frames()    
-#    # Get depth frame
-#    depth_frame = frames.get_depth_frame()
-#    ctr = ctr + 1
 
-# Process one frame only
-#LOOP_TIME = 100
-#ctr=0
-#while ctr < LOOP_TIME:
 while True:
     # Grab camera data
     if not state.paused:
@@ -203,187 +190,187 @@ while True:
         
     
         
-#        ######################################
-#        #   Downsample the point cloud       #
-#        #     with Voxel Grid Filter         #
-#        ######################################
-#        
-#        # Create a PCL pointcloud
-#        oriCloud = pcl.PointCloud(verts)
-#    
-#     
-#        # Starting time for downsampling
-#        now = time.time()
-#        
-#        # Create the Voxel Grid Filter Object
-#        vox = oriCloud.make_voxel_grid_filter()
-#        # Choose the voxel (leaf) size
-#        LEAF_SIZE = 0.01
-#        # Set the voxel size on the vox object
-#        vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
-#        
-#        # Call the voxel_grid_filter to obtain the downsampled cloud, called VGCloud (voxel_grid cloud)
-#        vgCloud = vox.filter()  
-#        
-#        
-#        # Downsampling time
-#        dt = time.time() - now   
-#        
-#                    
-#        # Debug
-#        if IS_DEBUG:
-#            # Print the size of the original point cloud
-#            print("The size of the original pointcloud: ", oriCloud.size) 
-#            # Print process time
-#            print("Downsampleing time: %10.9f", dt)
-#            # Print the size of the downsampled point cloud
-#            print("The size of the downsampled pointcloud: ", vgCloud.size)  
-#        
-#        
-#        # Save the image for visualization
-#        if SAVE_IMAGE:
-#            pcl.save(oriCloud, "oriCloud.pcd")
-#            pcl.save(vgCloud, "vgCloud.pcd")    
-#        
-#        
-#        
-#        
-#        ################################
-#        #   Apply Passthrough Filter   #
-#        #     (crop the image)         #
-#        ################################
-#        
-#    #    # Starting time for downsampling
-#    #    now1 = time.time()
-#    #    
-#    #    
-#    #    # Create a passthrough filter object
-#    #    passthrough = vgCloud.make_passthrough_filter()
-#    #        
-#    #    # Assign axis and range to the passthrough filter()
-#    #    FILTER_AXIS = 'z'
-#    #    passthrough.set_filter_field_name(FILTER_AXIS)
-#    #    AXIS_MIN = 0
-#    #    AXIS_MAX = 2
-#    #    passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
-#    #        
-#    #    # Call the passthrough filter to obtain the resultant pointcloud
-#    #    ptCloud = passthrough.filter()
-#    #     
-#    #    # Downsampling time
-#    #    dt1 = time.time() - now1 
-#    #
-#    #
-#    #    # Debug
-#    #    if IS_DEBUG:
-#    #        # Print the size of the cropped point cloud
-#    #        print("The size of the cropped pointcloud: ", ptCloud.size)
-#    #        # Print process time
-#    #        print("Cropping time: %10.9f", dt1)
-#    #
-#    #        
-#    #        
-#    #        
-#    #    # Save the image for visualization
-#    #    if SAVE_IMAGE:
-#    #        pcl.save(ptCloud, "passthroughCloud.pcd")
-#        
-#        
-#        
-#        
-#        ###################################
-#        #   Ground Segmentation (remove)  #
-#        #          via RANSAC             #
-#        ###################################
-#        
-#        # Starting time for ground segmentation
-#        now2 = time.time()
-#        
-#        # Create the segmentation object
-#        seg = vgCloud.make_segmenter()
-#    
-#        # Set the model you wish to fit
-#        seg.set_model_type(pcl.SACMODEL_PLANE)
-#        #seg.set_model_type(pcl.SAC_RANSAC)
-#                           
-#        # Max distance for the point to be consider fitting this model
-#        max_distance = 0.01
-#        seg.set_distance_threshold(max_distance)
-#    
-#        # Obtain a set of inlier indices ( who fit the plane) and model coefficients
-#        inliers, coefficients = seg.segment()
-#        
-#        # Extract Inliers obtained from previous step
-#        gdRemovedCloud = vgCloud.extract(inliers, negative=True)
-#    
-#        # Ground segmentation time
-#        dt2 = time.time() - now2
-#        
-#       
-#        
-#        # Debug
-#        if IS_DEBUG:
-#            # Print the size of the ground removed point cloud
-#            print("The size of the ground removed pointcloud: ", gdRemovedCloud.size)
-#            # Print process time
-#            print("Ground segmentation time: %10.9f", dt2)
-#           
-#        
-#        
-#        # Save the image for visualization
-#        if SAVE_IMAGE:
-#            pcl.save(gdRemovedCloud, "gdRemovedCloud.pcd")
-#        
-#        
-#        
-#        
-#        #################################
-#        #   Outlier removal Filter-     #
-#        #  Statistical Outlier Removal  #
-#        #################################
-#        
-#        # Starting time for outlier removal 
-#        now3 = time.time()
-#        
-#        
-#        # Create a statistical outlier filter object
-#        outlier = gdRemovedCloud.make_statistical_outlier_filter()
-#    
-#        # Set the number of neighboring points to analyze for any given point
-#        outlier.set_mean_k(50)
-#        
-#        # Set threshold scale factor
-#        outlier_threshold = 1.0
-#    
-#        # Eliminate the points whose mean distance is larger than global
-#        # (global dis = mean_dis + threshold * std_dev)               
-#        outlier.set_std_dev_mul_thresh(outlier_threshold)
-#    
-#        # Apply the statistical outlier removal filter
-#        olRemovedCloud = outlier.filter()
-#    
-#        # Outlier removal time
-#        dt3 = time.time() - now3
-#        
-#        
-#        # Convert the pcl pointcloud object to array type
-#        displayCloud = olRemovedCloud
-#        display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
-#        verts = display_verts    
-#        
-#    
-#    
-#        # Debug
-#        if IS_DEBUG:
-#            # Print the size of the ground removed point cloud
-#            print("The size of the outlier removed pointcloud: ", olRemovedCloud.size)   
-#            # Print process time
-#            print("Outlier removal time: %10.9f", dt3)
-#    
-#    
-#        # Save the image for visualization
-#        if SAVE_IMAGE:
-#            pcl.save(olRemovedCloud, "outlierRemovedCloud.pcd")
+        ######################################
+        #   Downsample the point cloud       #
+        #     with Voxel Grid Filter         #
+        ######################################
+        
+        # Create a PCL pointcloud
+        oriCloud = pcl.PointCloud(verts)
+    
+     
+        # Starting time for downsampling
+        now = time.time()
+        
+        # Create the Voxel Grid Filter Object
+        vox = oriCloud.make_voxel_grid_filter()
+        # Choose the voxel (leaf) size
+        LEAF_SIZE = 0.005
+        # Set the voxel size on the vox object
+        vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
+        
+        # Call the voxel_grid_filter to obtain the downsampled cloud, called VGCloud (voxel_grid cloud)
+        vgCloud = vox.filter()  
+        
+        
+        # Downsampling time
+        dt = time.time() - now   
+        
+                    
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the original point cloud
+            print("The size of the original pointcloud: ", oriCloud.size) 
+            # Print process time
+            print("Downsampleing time: %10.9f", dt)
+            # Print the size of the downsampled point cloud
+            print("The size of the downsampled pointcloud: ", vgCloud.size)  
+        
+        
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(oriCloud, "oriCloud.pcd")
+            pcl.save(vgCloud, "vgCloud.pcd")    
+        
+        
+        
+        
+        ###############################
+        #   Apply Passthrough Filter   #
+        #    (crop the image)         #
+        ###############################
+        
+        # Starting time for downsampling
+        now1 = time.time()
+        
+        
+        # Create a passthrough filter object
+        passthrough = vgCloud.make_passthrough_filter()
+            
+        # Assign axis and range to the passthrough filter()
+        FILTER_AXIS = 'z'
+        passthrough.set_filter_field_name(FILTER_AXIS)
+        AXIS_MIN = 0
+        AXIS_MAX = 0.6
+        passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
+            
+        # Call the passthrough filter to obtain the resultant pointcloud
+        ptCloud = passthrough.filter()
+         
+        # Downsampling time
+        dt1 = time.time() - now1 
+    
+    
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the cropped point cloud
+            print("The size of the cropped pointcloud: ", ptCloud.size)
+            # Print process time
+            print("Cropping time: %10.9f", dt1)
+    
+            
+            
+            
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(ptCloud, "passthroughCloud.pcd")
+        
+        
+        
+        
+        ###################################
+        #   Ground Segmentation (remove)  #
+        #          via RANSAC             #
+        ###################################
+        
+        # Starting time for ground segmentation
+        now2 = time.time()
+        
+        # Create the segmentation object
+        seg = ptCloud.make_segmenter()
+    
+        # Set the model you wish to fit
+        seg.set_model_type(pcl.SACMODEL_PLANE)
+        #seg.set_model_type(pcl.SAC_RANSAC)
+                           
+        # Max distance for the point to be consider fitting this model
+        max_distance = 0.015
+        seg.set_distance_threshold(max_distance)
+    
+        # Obtain a set of inlier indices ( who fit the plane) and model coefficients
+        inliers, coefficients = seg.segment()
+        
+        # Extract Inliers obtained from previous step
+        gdRemovedCloud = ptCloud.extract(inliers, negative=True)
+    
+        # Ground segmentation time
+        dt2 = time.time() - now2
+        
+       
+        
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the ground removed point cloud
+            print("The size of the ground removed pointcloud: ", gdRemovedCloud.size)
+            # Print process time
+            print("Ground segmentation time: %10.9f", dt2)
+           
+        
+        
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(gdRemovedCloud, "gdRemovedCloud.pcd")
+        
+        
+        
+        
+        #################################
+        #   Outlier removal Filter-     #
+        #  Statistical Outlier Removal  #
+        #################################
+        
+        # Starting time for outlier removal 
+        now3 = time.time()
+        
+        
+        # Create a statistical outlier filter object
+        outlier = gdRemovedCloud.make_statistical_outlier_filter()
+    
+        # Set the number of neighboring points to analyze for any given point
+        outlier.set_mean_k(100)
+        
+        # Set threshold scale factor
+        outlier_threshold = 0.05
+    
+        # Eliminate the points whose mean distance is larger than global
+        # (global dis = mean_dis + threshold * std_dev)               
+        outlier.set_std_dev_mul_thresh(outlier_threshold)
+    
+        # Apply the statistical outlier removal filter
+        olRemovedCloud = outlier.filter()
+    
+        # Outlier removal time
+        dt3 = time.time() - now3
+        
+        
+        # Convert the pcl pointcloud object to array type
+        displayCloud = olRemovedCloud
+        display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
+        verts = display_verts    
+        
+    
+    
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the ground removed point cloud
+            print("The size of the outlier removed pointcloud: ", olRemovedCloud.size)   
+            # Print process time
+            print("Outlier removal time: %10.9f", dt3)
+    
+    
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(olRemovedCloud, "outlierRemovedCloud.pcd")
             
     ##############################
     # Point Cloud Visuzalization #
