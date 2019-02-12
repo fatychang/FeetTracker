@@ -5,5 +5,5 @@ Point cloud pre-processing are done. Next, it should target the feet segmentatio
 
 
 ## PointCloudViewer.py
-It is extracted and from the realsense python sample code [Here] (https://github.com/IntelRealSense/librealsense/blob/master/wrappers/python/examples/opencv_pointcloud_viewer.py).It has been slightly modified in order to call from other script. Import the pointcloudViewer in the main script and add the following mouse_cb part so as to register it later.
+It is extracted and from the realsense python sample code [Here](https://github.com/IntelRealSense/librealsense/blob/master/wrappers/python/examples/opencv_pointcloud_viewer.py).It has been slightly modified in order to call from other script. Import the pointcloudViewer in the main script and add the following mouse_cb part so as to register it later.
 
