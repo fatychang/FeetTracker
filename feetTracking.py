@@ -24,6 +24,9 @@ import pointcloudViewer
 import open3d
 
 import math
+import matplotlib 
+
+
 
 
 
@@ -97,8 +100,8 @@ IS_DEBUG = False
 
 
 # .bag file location
-FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\feetTest1.bag"
-#FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\d415_1500.bag"
+#FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\feetTest1.bag"
+FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\d415_1500.bag"
 
 
 # Create the context object that holds the handle of all the connected devices
@@ -110,7 +113,8 @@ cfg = rs.config()
 # Tell config that we will use a recorded device from filem to be used by the pipeline through playback.
 rs.config.enable_device_from_file(cfg, FILE_LOC)
 # Configure the pipeline to stream the depth stream (resolution, format, and frame rate)
-cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+#cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30) # for feetTest1.bag
+cfg.enable_stream(rs.stream.depth, 640, 360, rs.format.z16, 60) # for d415_1500.bag
 
 # Start streaming from file and obtain the returned profile
 profile = pipeline.start(cfg)
@@ -142,16 +146,17 @@ cv2.setMouseCallback(state.WIN_NAME, mouse_cb)
 # Create param 'out' to store the frame data
 out = np.empty((h, w, 3), dtype=np.uint8)
 
-
-
-
+ 
+sample_datapoint = [0]
 
 #######################
 #    Stream loop      #
 #######################
-
-
 while True:
+    
+    # Render
+    now = time.time()
+    
     # Grab camera data
     if not state.paused:
         # Get the frames from pipeline
@@ -205,7 +210,7 @@ while True:
         # Create the Voxel Grid Filter Object
         vox = oriCloud.make_voxel_grid_filter()
         # Choose the voxel (leaf) size
-        LEAF_SIZE = 0.005
+        LEAF_SIZE = 0.001
         # Set the voxel size on the vox object
         vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
         
@@ -235,46 +240,46 @@ while True:
         
         
         
-        ###############################
-        #   Apply Passthrough Filter   #
-        #    (crop the image)         #
-        ###############################
-        
-        # Starting time for downsampling
-        now1 = time.time()
-        
-        
-        # Create a passthrough filter object
-        passthrough = vgCloud.make_passthrough_filter()
-            
-        # Assign axis and range to the passthrough filter()
-        FILTER_AXIS = 'z'
-        passthrough.set_filter_field_name(FILTER_AXIS)
-        AXIS_MIN = 0
-        AXIS_MAX = 0.6
-        passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
-            
-        # Call the passthrough filter to obtain the resultant pointcloud
-        ptCloud = passthrough.filter()
-         
-        # Downsampling time
-        dt1 = time.time() - now1 
-    
-    
-        # Debug
-        if IS_DEBUG:
-            # Print the size of the cropped point cloud
-            print("The size of the cropped pointcloud: ", ptCloud.size)
-            # Print process time
-            print("Cropping time: %10.9f", dt1)
-    
-            
-            
-            
-        # Save the image for visualization
-        if SAVE_IMAGE:
-            pcl.save(ptCloud, "passthroughCloud.pcd")
-        
+#        ###############################
+#        #   Apply Passthrough Filter   #
+#        #    (crop the image)         #
+#        ###############################
+#        
+#        # Starting time for downsampling
+#        now1 = time.time()
+#        
+#        
+#        # Create a passthrough filter object
+#        passthrough = vgCloud.make_passthrough_filter()
+#            
+#        # Assign axis and range to the passthrough filter()
+#        FILTER_AXIS = 'z'
+#        passthrough.set_filter_field_name(FILTER_AXIS)
+#        AXIS_MIN = 0
+#        AXIS_MAX = 1
+#        passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
+#            
+#        # Call the passthrough filter to obtain the resultant pointcloud
+#        ptCloud = passthrough.filter()
+#         
+#        # Downsampling time
+#        dt1 = time.time() - now1 
+#    
+#    
+#        # Debug
+#        if IS_DEBUG:
+#            # Print the size of the cropped point cloud
+#            print("The size of the cropped pointcloud: ", ptCloud.size)
+#            # Print process time
+#            print("Cropping time: %10.9f", dt1)
+#    
+#            
+#            
+#            
+#        # Save the image for visualization
+#        if SAVE_IMAGE:
+#            pcl.save(ptCloud, "passthroughCloud.pcd")
+#        
         
         
         
@@ -287,21 +292,22 @@ while True:
         now2 = time.time()
         
         # Create the segmentation object
-        seg = ptCloud.make_segmenter()
+        seg = vgCloud.make_segmenter_normals()
     
         # Set the model you wish to fit
         seg.set_model_type(pcl.SACMODEL_PLANE)
-        #seg.set_model_type(pcl.SAC_RANSAC)
+        seg.set_method_type(pcl.SAC_RANSAC)
                            
         # Max distance for the point to be consider fitting this model
-        max_distance = 0.015
+        max_distance = 5
         seg.set_distance_threshold(max_distance)
     
         # Obtain a set of inlier indices ( who fit the plane) and model coefficients
         inliers, coefficients = seg.segment()
+        print(len(inliers))
         
         # Extract Inliers obtained from previous step
-        gdRemovedCloud = ptCloud.extract(inliers, negative=True)
+        gdRemovedCloud = vgCloud.extract(inliers, negative=True)
     
         # Ground segmentation time
         dt2 = time.time() - now2
@@ -324,37 +330,39 @@ while True:
         
         
         
-        #################################
-        #   Outlier removal Filter-     #
-        #  Statistical Outlier Removal  #
-        #################################
-        
-        # Starting time for outlier removal 
-        now3 = time.time()
-        
-        
-        # Create a statistical outlier filter object
-        outlier = gdRemovedCloud.make_statistical_outlier_filter()
-    
-        # Set the number of neighboring points to analyze for any given point
-        outlier.set_mean_k(100)
-        
-        # Set threshold scale factor
-        outlier_threshold = 0.05
-    
-        # Eliminate the points whose mean distance is larger than global
-        # (global dis = mean_dis + threshold * std_dev)               
-        outlier.set_std_dev_mul_thresh(outlier_threshold)
-    
-        # Apply the statistical outlier removal filter
-        olRemovedCloud = outlier.filter()
-    
-        # Outlier removal time
-        dt3 = time.time() - now3
+#        #################################
+#        #   Outlier removal Filter-     #
+#        #  Statistical Outlier Removal  #
+#        #################################
+#        
+#        # Starting time for outlier removal 
+#        now3 = time.time()
+#        
+#        
+#        # Create a statistical outlier filter object
+#        outlier = gdRemovedCloud.make_statistical_outlier_filter()
+#    
+#        # Set the number of neighboring points to analyze for any given point
+#        outlier.set_mean_k(50)
+#        
+#        # Set threshold scale factor
+#        outlier_threshold = 1
+#    
+#        # Eliminate the points whose mean distance is larger than global
+#        # (global dis = mean_dis + threshold * std_dev)               
+#        outlier.set_std_dev_mul_thresh(outlier_threshold)
+#    
+#        # Apply the statistical outlier removal filter
+#        olRemovedCloud = outlier.filter()
+#    
+#        # Outlier removal time
+#        dt3 = time.time() - now3
         
         
         # Convert the pcl pointcloud object to array type
-        displayCloud = olRemovedCloud
+#        displayCloud = olRemovedCloud
+        displayCloud = gdRemovedCloud
+#        displayCloud = vgCloud
         display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
         verts = display_verts    
         
@@ -376,8 +384,7 @@ while True:
     # Point Cloud Visuzalization #
     ##############################
     
-    # Render
-    now = time.time()
+
 
     out.fill(0)
 
@@ -386,10 +393,10 @@ while True:
     pointcloudViewer.axes(out, pointcloudViewer.view(state, [0, 0, 0]), state.rotation, size=0.1, thickness=1)
 
     if not state.scale or out.shape[:2] == (h, w):
-        pointcloudViewer.pointcloud(state, out, verts, texcoords, color_source)
+        sample_datapoint.append(pointcloudViewer.pointcloud(state, out, verts, texcoords, color_source))
     else:
         tmp = np.zeros((h, w, 3), dtype=np.uint8)
-        pointcloudViewer.pointcloud(state, tmp, verts, texcoords, color_source)
+        sample_datapoint.append(pointcloudViewer.pointcloud(state, tmp, verts, texcoords, color_source))
         tmp = cv2.resize(
             tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
         np.putmask(out, tmp > 0, tmp)
