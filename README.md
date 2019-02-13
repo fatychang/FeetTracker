@@ -2,7 +2,10 @@
 This project aims to develop an python real-time feet tracking function. In addition, it support playback recorded .bag file.
 Point cloud pre-processing are done. Next, it should target the feet segmentation and identification.
 
-
+## FeetTracking.py
+The main script to perform the feet tracking algorithm. Currently, it only supports playback.
+Point cloud pre-processing includes downsampling, image cropping, ground segmentation, and outlier removal.
+The next step should cluster the left and right foot via k-mean or other unsupervised clustering method.
 
 ## PointCloudViewer.py
 It is extracted and from the realsense python sample code [Here](https://github.com/IntelRealSense/librealsense/blob/master/wrappers/python/examples/opencv_pointcloud_viewer.py).It has been slightly modified in order to call from other script. Import the pointcloudViewer in the main script and add the following **mouse_cb** part for easy registration in the main script.
