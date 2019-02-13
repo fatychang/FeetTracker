@@ -20,6 +20,12 @@ import time
 import pointcloudViewer
 # Import open3d for visualization
 import open3d
+# Import k-mean classifier from scikit learn
+from sklearn.cluster import KMeans, MiniBatchKMeans
+from sklearn.cluster import SpectralClustering
+from sklearn.cluster import DBSCAN
+
+
 
 import math
 
@@ -297,7 +303,7 @@ while True:
         seg.set_model_type(pcl.SAC_RANSAC)
                            
         # Max distance for the point to be consider fitting this model
-        max_distance = 0.02
+        max_distance = 0.015
         seg.set_distance_threshold(max_distance)
     
         # Obtain a set of inlier indices ( who fit the plane) and model coefficients
@@ -356,13 +362,6 @@ while True:
         dt3 = time.time() - now3
         
         
-        # Convert the pcl pointcloud object to array type
-        displayCloud = olRemovedCloud
-        display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
-        verts = display_verts    
-        
-    
-    
         # Debug
         if IS_DEBUG:
             # Print the size of the ground removed point cloud
@@ -374,12 +373,80 @@ while True:
         # Save the image for visualization
         if SAVE_IMAGE:
             pcl.save(olRemovedCloud, "outlierRemovedCloud.pcd")
-            
-    ##############################
-    # Point Cloud Visuzalization #
-    ##############################
+        
+        
+        
+        ##################################
+        #     Conver the pcl pointcloud  #
+        #    object to numpy array type  #
+        ##################################               
+        
+        # Convert the pcl pointcloud object to array type
+        displayCloud = olRemovedCloud
+        display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
+        verts = display_verts
+        
+        
+        
+        
+        ###################################
+        #    Classify to left/right leg   #
+        ###################################
+        
+#        # Implement k-mean for classification --> not accurate enough
+#        init_idx = [verts.shape[0] / 2 - 20, verts.shape[0] / 2 + 20]
+#        init_idx = np.array(init_idx)
+#        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
+#        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
+#        k_means.fit(verts)
+#        label = k_means.labels_
+        
+#        # Implement minibatch k-means --> same as k-mean
+#        mbk = MiniBatchKMeans(n_clusters = 2)
+#        mbk.fit(verts)
+#        label = mbk.labels_
+#        centers = mbk.cluster_centers_
+        
+#        # Spectral Cluster -> Too slow
+#        spectral_cluster = SpectralClustering(n_clusters = 2)
+#        spectral_cluster.fit(verts)
+#        label = spectral_cluster.labels_
+        
+        
+        # DBSCAN --> unacceptable and too slow
+#        db = DBSCAN()
+#        db.fit(verts)
+#        label = db.labels_
+        
+        
+        ##############################
+        # Point Cloud Visuzalization #
+        ##############################
+        
+        
+#        # Draw k-mean initial guess point
+#    #    p0 = tuple([verts[init_idx[0], :]])
+#    #    p1 = tuple([verts[init_idx[1], :]])
+#        p0 = verts[init_idx[0], :]
+#        p1 = verts[init_idx[1], :]
+#        color = (0, 0, 255)
+#        pointcloudViewer.line3d_exa(out, p0, p1, color, thickness=50)
+        
+        
+        
+        
+#        # Remove the points which below to group 1
+#        for idx, val in enumerate (label):
+#            if val == 1:
+#                verts[idx, :] = np.zeros(3)
+
+    
     
 
+            
+
+    
+    
 
     out.fill(0)
 
