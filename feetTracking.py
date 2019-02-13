@@ -214,7 +214,7 @@ while True:
         # Create the Voxel Grid Filter Object
         vox = oriCloud.make_voxel_grid_filter()
         # Choose the voxel (leaf) size
-        LEAF_SIZE = 0.0045
+        LEAF_SIZE = 0.005  # also can set 0.043
         # Set the voxel size on the vox object
         vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
         
@@ -300,10 +300,10 @@ while True:
     
         # Set the model you wish to fit
         seg.set_model_type(pcl.SACMODEL_PLANE)
-        seg.set_model_type(pcl.SAC_RANSAC)
+        seg.set_method_type(pcl.SAC_RANSAC)
                            
         # Max distance for the point to be consider fitting this model
-        max_distance = 0.015
+        max_distance = 0.010
         seg.set_distance_threshold(max_distance)
     
         # Obtain a set of inlier indices ( who fit the plane) and model coefficients
