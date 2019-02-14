@@ -7,6 +7,8 @@ The main script to perform the feet tracking algorithm. Currently, it only suppo
 Point cloud pre-processing includes downsampling, image cropping, ground segmentation, and outlier removal.
 The next step should cluster the left and right foot via k-mean or other unsupervised clustering method.
 
+k-Mean is unacceptable since it will classify the legs wrongly to up and down instead of left and right. Therefore, I am trying to use directly segment the leg with cylinder model via Hough Transform.
+
 ## PointCloudViewer.py
 It is extracted and from the realsense python sample code [Here](https://github.com/IntelRealSense/librealsense/blob/master/wrappers/python/examples/opencv_pointcloud_viewer.py).It has been slightly modified in order to call from other script. Import the pointcloudViewer in the main script and add the following **mouse_cb** part for easy registration in the main script.
 ```
