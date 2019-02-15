@@ -24,6 +24,7 @@ import open3d
 from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.cluster import SpectralClustering
 from sklearn.cluster import DBSCAN
+from sklearn.cluster import AgglomerativeClustering
 
 
 
@@ -85,6 +86,52 @@ def mouse_cb(event, x, y, flags, param):
         state.distance -= dz
 
     state.prev_mouse = (x, y)
+
+
+
+#####################
+##      FloodFill  ##
+#####################
+def floodfillClassifier (inputArray, mask, seedPoint, newVal, rect, loDiff, upDiff, flags):
+    # Obtain the number of datapoints
+    dataNo = inputArray.shape[0]   
+    # Define the mask
+    mask = np.zeros((verts.shape[0] + 2), np.uint8)
+    seedPoint = None
+    fixedRange = True
+    connectivity = 4
+    
+    # Update floodfill
+    loDiff = 1
+    hiDiff = 1
+    flags = connectivity
+    if fixedRange:
+        flags |= cv2.FLOODFILL_FIXED_RANGE
+    
+    try:
+        cv2.floodFill(verts, mask, seedPoint, (0, 0, 0), (loDiff,)*3, (hiDiff,)*3, flags)
+    except:
+        print("floodfill failed")
+    
+    for i in range(dataNo):
+        seedPoint = inputArray[i, 0]
+
+    newVal = (0)
+    retval, image, mask, rect = cv2.floodFill(verts, mask, seedPoint, newVal)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -260,7 +307,7 @@ while True:
         FILTER_AXIS = 'z'
         passthrough.set_filter_field_name(FILTER_AXIS)
         AXIS_MIN = 0
-        AXIS_MAX = 0.68
+        AXIS_MAX = 0.9
         passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
             
         # Call the passthrough filter to obtain the resultant pointcloud
@@ -346,10 +393,10 @@ while True:
         outlier = gdRemovedCloud.make_statistical_outlier_filter()
     
         # Set the number of neighboring points to analyze for any given point
-        outlier.set_mean_k(100)
+        outlier.set_mean_k(10)
         
         # Set threshold scale factor
-        outlier_threshold = 0.05
+        outlier_threshold = 0.01
     
         # Eliminate the points whose mean distance is larger than global
         # (global dis = mean_dis + threshold * std_dev)               
@@ -376,6 +423,37 @@ while True:
         
         
         
+
+        
+        
+        
+        
+        ###################################
+        #    Segment left/right leg   #
+        ###################################
+        # Hough Transform
+        # cylinders = cv2.HoughCylinders()
+        
+        
+        # --> unable to segment via RANSAC (maybe because there are two cylinders)
+#        # Create the segmentation object
+#        seg_leg = olRemovedCloud.make_segmenter()
+#    
+#        # Set the model you wish to fit
+#        seg_leg.set_model_type(pcl.SACMODEL_CYLINDER)
+#        seg_leg.set_method_type(pcl.SAC_RANSAC)
+#        
+#        # Set the threshold value
+#        max_distance = 100
+#        seg_leg.set_distance_threshold(max_distance)
+#        
+#        # Obtain a set of inlier indices ( who fit the plane) and model coefficients
+#        inliers_leg, coefficients = seg_leg.segment()
+#        
+#        # Extract Inliers obtained from previous step
+#        LegRemovedCloud = ptCloud.extract(inliers_leg, negative=False)
+  
+
         ##################################
         #     Conver the pcl pointcloud  #
         #    object to numpy array type  #
@@ -383,29 +461,26 @@ while True:
         
         # Convert the pcl pointcloud object to array type
         displayCloud = olRemovedCloud
+        #displayCloud = LegRemovedCloud
         display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
         verts = display_verts
+
+      
+        
+        ############################
+        ## Clustering Testing     #
+        ###########################
+
+#        # Ward hierachical clustering method
+#        ward = AgglomerativeClustering(n_clusters=2, linkage='ward')
+#        ward.fit(verts)
+#        label = ward.labels_
         
         
+        # Floodfill from opencv
+        floodfillClassifier()
         
-        
-        ###################################
-        #    Classify to left/right leg   #
-        ###################################
-        
-#        # Implement k-mean for classification --> not accurate enough
-#        init_idx = [verts.shape[0] / 2 - 20, verts.shape[0] / 2 + 20]
-#        init_idx = np.array(init_idx)
-#        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
-#        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
-#        k_means.fit(verts)
-#        label = k_means.labels_
-        
-#        # Implement minibatch k-means --> same as k-mean
-#        mbk = MiniBatchKMeans(n_clusters = 2)
-#        mbk.fit(verts)
-#        label = mbk.labels_
-#        centers = mbk.cluster_centers_
+
         
 #        # Spectral Cluster -> Too slow
 #        spectral_cluster = SpectralClustering(n_clusters = 2)
@@ -418,27 +493,52 @@ while True:
 #        db.fit(verts)
 #        label = db.labels_
         
+
+        
+        
+        
+        #########################
+        #  K-Mean Clustering   #
+        ########################
+        # Implement k-mean for classification --> not accurate enough
+        init_idx = [verts.shape[0] / 2 - 150, verts.shape[0] / 2 + 150]
+#        init_idx = [10  , verts.shape[0] - 50]
+        init_idx = np.array(init_idx)
+        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
+        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
+        k_means.fit(verts)
+        label = k_means.labels_
+        
+#        # Implement minibatch k-means --> same as k-mean
+#        mbk = MiniBatchKMeans(n_clusters = 2)
+#        mbk.fit(verts)
+#        label = mbk.labels_
+#        centers = mbk.cluster_centers_
+        
+        
+        
+        
         
         ##############################
         # Point Cloud Visuzalization #
         ##############################
         
         
-#        # Draw k-mean initial guess point
+#    # Draw k-mean initial guess point
 #    #    p0 = tuple([verts[init_idx[0], :]])
 #    #    p1 = tuple([verts[init_idx[1], :]])
-#        p0 = verts[init_idx[0], :]
-#        p1 = verts[init_idx[1], :]
-#        color = (0, 0, 255)
-#        pointcloudViewer.line3d_exa(out, p0, p1, color, thickness=50)
+#    p0 = verts[init_idx[0], :]
+#    p1 = verts[init_idx[1], :]
+#    #color = (0, 0, 255)
+#    pointcloudViewer.line3d_exa(out, p0, p1,  thickness=50)
         
         
         
         
-#        # Remove the points which below to group 1
-#        for idx, val in enumerate (label):
-#            if val == 1:
-#                verts[idx, :] = np.zeros(3)
+    # Remove the points which below to group 1 to visualize the clustering result
+    for idx, val in enumerate (label):
+        if val == 1:
+            verts[idx, :] = np.zeros(3)
 
     
     
