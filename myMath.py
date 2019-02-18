@@ -10,8 +10,8 @@ import math
 
 
 '''
-Estimate the width and height of the corresponding 2D image
-from the pointcloud datapoints
+Approximate the width and height of the corresponding 2D image
+from the pointcloud datapoints via the number of datapoints and image size
 
 The pointcloud_array argument should be a numpy array with size of [num_of_point, 3]
 Return the width(w), height(h), and the image_array itself
@@ -38,8 +38,11 @@ def forced_project_to_2Dimage (pointcloud_array):
     # Round the values to int and return (width, height)
     w = int(x)
     h = int(y)
-    image = pointcloud_array.reshape(int(w), int(h), 3)
-    return (w, h, image)
+    
+    # Obtain the 2d image via the approximated width and height
+    approx_array = pointcloud_array[0: int(w * h), :]
+    image_array = approx_array.reshape(int(w), int(h), 3)
+    return (w, h, image_array)
     
 
 
