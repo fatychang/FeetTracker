@@ -96,9 +96,10 @@ def mouse_cb(event, x, y, flags, param):
 #####################
 def floodfillClassifier (inputArray, mask, seedPoint, newVal, rect, loDiff, upDiff, flags):
     # Obtain the number of datapoints
-    dataNo = inputArray.shape[0]   
+    dataNo = inputArray.shape[0] 
+    datapoints = verts.reshape(int(w), int(h),3)
     # Define the mask
-    mask = np.zeros((verts.shape[0] + 2), np.uint8)
+    mask = np.zeros([int(w)+2, int(h)+2], np.uint8)
     seedPoint = None
     fixedRange = True
     connectivity = 4
@@ -111,7 +112,7 @@ def floodfillClassifier (inputArray, mask, seedPoint, newVal, rect, loDiff, upDi
         flags |= cv2.FLOODFILL_FIXED_RANGE
     
     try:
-        cv2.floodFill(verts, mask, seedPoint, (0, 0, 0), (loDiff,)*3, (hiDiff,)*3, flags)
+        tmp = cv2.floodFill(datapoint, mask, seedPoint, (0, 0, 0))
     except:
         print("floodfill failed")
     
@@ -470,14 +471,20 @@ while True:
         display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
         verts = display_verts
         
-        
-#        # 2D image display
-#        points2d_x = verts[:, 0]
-#        points2d_y = verts[:, 1]
-#        plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
-
         # Extimate the image width and height
         w, h = myMath.findwidthHeight(verts)
+        
+        
+        # 2D image display
+        points2d_x = verts[:, 0]
+        points2d_y = verts[:, 1]
+        estimatedImage = verts[0: int(w * h), :]
+        points2d_x = estimatedImage[:, 0]
+        points2d_y = estimatedImage[:, 1]
+        datapoint = estimatedImage.reshape(int(w), int(h), 3)
+        plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
+
+
       
         
         ############################
