@@ -45,3 +45,6 @@ def mouse_cb(event, x, y, flags, param):
         state.distance -= dz
     state.prev_mouse = (x, y)
 ```
+## myMath.py
+This script handles some self-defined functions related to simple math. The following are the callable functions:
+- findwidthHeight(): Obtain the estimated width and height of an pointcloud data stored in the numpy array.
