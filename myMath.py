@@ -35,7 +35,7 @@ def forced_project_to_2Dimage (pointcloud_array):
     # find y via y = ratio * x
     y = ratio * x
     
-    # Round the values to int and return (width, height)
+    # Round the values to int (less than) and return (width, height)
     w = int(x)
     h = int(y)
     
