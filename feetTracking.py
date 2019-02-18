@@ -26,9 +26,11 @@ from sklearn.cluster import SpectralClustering
 from sklearn.cluster import DBSCAN
 from sklearn.cluster import AgglomerativeClustering
 
+from matplotlib import pyplot as plt
 
 
 import math
+import myMath
 
 
 
@@ -242,8 +244,11 @@ while True:
         verts = np.asarray(v).view(np.float32).reshape(-1,3) #xyz
         texcoords = np.asarray(t).view(np.float32).reshape(-1,2) #uv
         
-        
-        
+#        # 2D image display
+#        points2d_x = verts[:, 0]
+#        points2d_y = verts[:, 1]
+#        plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
+
     
         
         ######################################
@@ -261,7 +266,7 @@ while True:
         # Create the Voxel Grid Filter Object
         vox = oriCloud.make_voxel_grid_filter()
         # Choose the voxel (leaf) size
-        LEAF_SIZE = 0.005  # also can set 0.043
+        LEAF_SIZE = 0.005  # unit is in [meter] (also can set 0.043)
         # Set the voxel size on the vox object
         vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
         
@@ -464,7 +469,15 @@ while True:
         #displayCloud = LegRemovedCloud
         display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
         verts = display_verts
+        
+        
+#        # 2D image display
+#        points2d_x = verts[:, 0]
+#        points2d_y = verts[:, 1]
+#        plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
 
+        # Extimate the image width and height
+        w, h = myMath.findwidthHeight(verts)
       
         
         ############################
@@ -478,7 +491,7 @@ while True:
         
         
         # Floodfill from opencv
-        floodfillClassifier()
+        #floodfillClassifier()
         
 
         
@@ -500,14 +513,14 @@ while True:
         #########################
         #  K-Mean Clustering   #
         ########################
-        # Implement k-mean for classification --> not accurate enough
-        init_idx = [verts.shape[0] / 2 - 150, verts.shape[0] / 2 + 150]
-#        init_idx = [10  , verts.shape[0] - 50]
-        init_idx = np.array(init_idx)
-        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
-        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
-        k_means.fit(verts)
-        label = k_means.labels_
+#        # Implement k-mean for classification --> not accurate enough
+#        init_idx = [verts.shape[0] / 2 - 150, verts.shape[0] / 2 + 150]
+##        init_idx = [10  , verts.shape[0] - 50]
+#        init_idx = np.array(init_idx)
+#        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
+#        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
+#        k_means.fit(verts)
+#        label = k_means.labels_
         
 #        # Implement minibatch k-means --> same as k-mean
 #        mbk = MiniBatchKMeans(n_clusters = 2)
@@ -536,9 +549,9 @@ while True:
         
         
     # Remove the points which below to group 1 to visualize the clustering result
-    for idx, val in enumerate (label):
-        if val == 1:
-            verts[idx, :] = np.zeros(3)
+#    for idx, val in enumerate (label):
+#        if val == 1:
+#            verts[idx, :] = np.zeros(3)
 
     
     
