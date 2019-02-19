@@ -91,12 +91,67 @@ def mouse_cb(event, x, y, flags, param):
 
 
 
+
+
+
+
 #####################
 ##      FloodFill  ##
 #####################
-def floodfillClassifier (inputArray, mask, seedPoint, newVal, rect, loDiff, upDiff, flags):
-    # Obtain the number of datapoints
-    dataNo = inputArray.shape[0] 
+def floodfillClassifier (verts, mask, seedPoint, newVal, rect, loDiff, upDiff, flags):
+    
+    # Convert the pointcloud data into 2D image with approximated width and height
+    w, h, image_array = myMath.forced_project_to_2Dimage(verts)   
+    
+
+    
+    
+    # Reshape the datapoint and obtain the number of datapoints
+    dataPoints = image_array.reshape(-1, 3)
+    dataNo = image_array.shape[0] * image_array.shape[1]
+
+
+    # plot the projected pointcloud
+#    myMath.plot_points(dataPoints)
+    
+    
+
+    # Mark the points in the image that are chosen as points in the clusters
+    ptsToBeClassifiedBef = dataPoints[:, 2] / 4 * 1000     
+    ptsToBeClassified = ptsToBeClassifiedBef.reshape(int(w), int(h))
+    #mask = np.zeros([int(w)+2, int(h)+2], np.uint8)
+    mask = np.zeros([ptsToBeClassified.shape[0] + 2, ptsToBeClassified.shape[1]+2], np.uint8)
+    for i in range(dataNo):
+        coor = int(dataPoints[i, 0] + dataPoints[i, 1] * w)
+#        print coor
+        ptsToBeClassifiedBef[coor] = dataPoints[i, 2]/ 4 * 1000 # Change the depth unit (z value) to [mm]
+    
+    label=[]
+    seedPoint = tuple(image_array[10, h/2, 0:2])
+    seedPoint = image_array[w-10, h/2, 0:2]
+    plt.plot(seedPoint[0], seedPoint[1], 'r+')
+    
+    # Floodfill the image and record clusters with large number of points
+    for i in range(dataNo):
+        seedPoint = tuple([dataPoints[i, 0], dataPoints[i, 1]])
+        retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=0, loDiff=10, upDiff=10)
+        label.append(retval)
+    
+    
+    newVal = (0, 0, 0)
+
+    
+    
+    # Mark the points in the image that are chosen as points in the clusters
+    for i in range(dataNo):
+        # Choose the point to be seedPoint
+        seedPoint = tuple([inputdatapoints[i, 0], inputdatapoints[i, 1]])
+        retval, image, mask, rect = cv2.floodFill(inputdatapoints, mask, seedPoint, newVal)
+    
+    
+    
+    
+    
     datapoints = verts.reshape(int(w), int(h),3)
     # Define the mask
     mask = np.zeros([int(w)+2, int(h)+2], np.uint8)
@@ -126,6 +181,9 @@ def floodfillClassifier (inputArray, mask, seedPoint, newVal, rect, loDiff, upDi
 
 
 
+#####################
+##  Floodfill Test  #
+#####################
 
 
 
@@ -472,17 +530,17 @@ while True:
         verts = display_verts
         
         # Extimate the image width and height
-        w, h = myMath.findwidthHeight(verts)
+        w, h, image_2d = myMath.forced_project_to_2Dimage(verts)
         
         
-        # 2D image display
-        points2d_x = verts[:, 0]
-        points2d_y = verts[:, 1]
-        estimatedImage = verts[0: int(w * h), :]
-        points2d_x = estimatedImage[:, 0]
-        points2d_y = estimatedImage[:, 1]
-        datapoint = estimatedImage.reshape(int(w), int(h), 3)
-        plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
+#        # 2D image display
+#        points2d_x = verts[:, 0]
+#        points2d_y = verts[:, 1]
+#        estimatedImage = verts[0: int(w * h), :]
+#        points2d_x = estimatedImage[:, 0]
+#        points2d_y = estimatedImage[:, 1]
+#        datapoint = estimatedImage.reshape(int(w), int(h), 3)
+#        #plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
 
 
       
