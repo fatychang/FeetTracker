@@ -6,6 +6,7 @@ Created on Mon Feb 18 13:14:34 2019
 """
 
 import math
+import matplotlib.pyplot as plt
 
 
 
@@ -43,6 +44,31 @@ def forced_project_to_2Dimage (pointcloud_array):
     approx_array = pointcloud_array[0: int(w * h), :]
     image_array = approx_array.reshape(int(w), int(h), 3)
     return (w, h, image_array)
-    
 
+
+
+
+'''
+Plot the points in a 2D image
+'''
+def plot_points(dataPoints):
+    
+    # Extract the x and y value
+    x = dataPoints[:, 0]
+    y = dataPoints[:, 1]
+    
+    # Obtain the width and height of the 2D image
+    w, h, image = forced_project_to_2Dimage(dataPoints)
+    
+    plt.plot(x.tolist(), y.tolist(), 'yo')
+    
+'''
+Plot circle indicating clustering center (or seed point)
+'''
+def plot_circle(center, radius=1):
+    
+#    # Plot the circle on top of an image to indicate the center of the cluster
+#    plt.Circle(center, radius)
+#    plt.show()
+    plt.plot(center, 'r+')
 
