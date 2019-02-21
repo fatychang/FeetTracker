@@ -24,10 +24,13 @@ import open3d
 from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.cluster import SpectralClustering
 from sklearn.cluster import DBSCAN
+from sklearn.cluster import AgglomerativeClustering
 
+from matplotlib import pyplot as plt
 
 
 import math
+import myMath
 
 
 
@@ -85,6 +88,229 @@ def mouse_cb(event, x, y, flags, param):
         state.distance -= dz
 
     state.prev_mouse = (x, y)
+
+
+
+
+
+
+
+#####################
+##      FloodFill  ##
+#####################
+def floodfillClassifier (verts, loDiff, upDiff):
+    
+    # Convert the pointcloud data into 2D image with approximated width and height
+    w, h, image_array = myMath.forced_project_to_2Dimage(verts)   
+        
+    # Reshape the datapoint and obtain the number of datapoints
+    dataPoints = image_array.reshape(-1, 3)
+    dataNo = image_array.shape[0] * image_array.shape[1]
+
+
+    # Mark the points in the image that are chosen as points in the clusters
+    ptsToBeClassified = (dataPoints[:, 2] / 4 * 1000).reshape(int(h), int(w)) # Convert the depth to a larger scale
+    
+    # Mask with the size of w+2, h+2 of the target image
+    mask = np.zeros([ptsToBeClassified.shape[0] + 2, ptsToBeClassified.shape[1]+2], np.uint8)
+   
+    # Manually assign the seedPoints (Did not use anymore, change to randomly assign seedpoints)
+#    seedPoint = tuple(image_array[10, 10, 0:2])
+#    
+#    seedPoints = [tuple(image_array[w/4, h/4, 0:2]), tuple(image_array[w/2, h/4, 0:2]), tuple(image_array[3 * w/4, h/4, 0:2]),
+#                tuple(image_array[w/4, h/2, 0:2]), tuple(image_array[w/2, h/2, 0:2]), tuple(image_array[3 * w/4, h/2, 0:2]),
+#                tuple(image_array[w/4, 3 * h/4, 0:2]), tuple(image_array[w/2, 3* h/4, 0:2]), tuple(image_array[3* w/4, 3* h/4, 0:2])]
+#    seedPoint = tuple(seedPoints)
+
+    
+    # Randomly select 1% of total datapoints as seedPoints
+    seedPointsNo = int(dataNo/100)
+    seedPoints = np.zeros([seedPointsNo, 2]) # store the x and y index number
+    seeds = np.zeros([seedPointsNo, 2]) # store the acutal x and y value of the seedpoints
+    for i in range(0, seedPointsNo):
+
+        # Here is a tricky way to avoid the dimension overfit problem which I haven't solve.
+        # (If i select the seedpoints based on the max number of rows and column individaully,
+        # later in the cv.floodfill will incounter the problem suggesting that the seeds are outside the image)
+        if h > w:
+            random_index1 = np.random.randint(1, w-1) # rows
+            random_index2 = np.random.randint(1, w-1) # columns
+        else:
+            random_index1 = np.random.randint(1, h-1) # rows
+            random_index2 = np.random.randint(1, h-1) # columns            
+            
+
+        seedPoints[i, :] = [random_index1, random_index2]
+        seeds[i, :] = dataPoints[random_index2 + random_index1 * w, 0:2]
+    
+
+    
+
+
+    
+  
+    
+    # Prepare to run floodfill from all the selected seedpoints
+    skippedNo=0         # the number of seedpoints that are being skipped
+    groupedNo = 0       # the number of groups that is clustered (ideally, should be two)     
+    retval_array = np.zeros(seedPointsNo)   # store the number of points in each cluster    
+    
+    for i in range(seedPointsNo):
+        
+        # Extract the seedPoint from the seedPoints array
+        seedPoint = int(seedPoints[i,0]), int(seedPoints[i, 1])
+        # Clear the retval in case the selected seedPoint is skipped
+        retval = 0
+              
+        #print ptsToBeClassified[seedPoint[0], seedPoint[1]]        # the depth value of the seedpoint itself
+        
+        # Skip the seedpoints that already been clustered        
+        if i > 0: # afer the first iteration, skip the seedpoint if it's already assigned to a group           
+            if ptsToBeClassified[seedPoint[0], seedPoint[1]] > seedPointsNo: # Meaning that the seedpoint haven't been clustered yet
+
+                newVal = tuple([i+1])
+                retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=newVal, loDiff=loDiff, upDiff=upDiff)
+                #print(i, retval)
+                
+            else: # Skip the seedpoint when it is already been clustered
+                skippedNo = skippedNo + 1
+        else: # Run the first floodfill with the first seedpoint
+            retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=1, loDiff=loDiff, upDiff=upDiff)
+            #print(i, retval)
+        
+        # Calculate the number of groups (what if the first seedpoint failed to group?)
+        if retval != 0:
+            groupedNo = groupedNo + 1
+        
+        # Break the loop when all the datapoints are grouped
+        retval_array[i] = retval
+        if sum(retval_array) == dataNo :
+            break
+     ## End of running floodfill ##   
+        
+            
+                
+    # Group the clusters to two groups
+    group_one = np.zeros([w* h, 3])      
+    group_two = np.zeros([w* h, 3])
+    gp_one_ctr = 0
+    gp_two_ctr = 0    
+    
+    if groupedNo == 0:
+        print('Did not find any group')
+        
+        # Perform floodfill agian
+        floodfillClassifier(verts)
+        
+    elif groupedNo == 1:
+        print('Only one group is found')
+        
+        # Find the number of elements that is assigned to the cluster
+        elementsNo = 0
+        for i in range(ptsToBeClassified.shape[0]):
+            for j in range(ptsToBeClassified.shape[1]):
+                if ptsToBeClassified[i, j] == 1:
+                    elementsNo = elementsNo + 1
+        
+                
+        # Cut the image from middle base on the x value
+        max_x = dataPoints.max(0)[0]
+        min_x = dataPoints.min(0)[0]
+        middle = (max_x + min_x) / 2
+        
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == 1:
+                    if dataPoints[j + w* i, 0] < middle : # left leg
+                        group_one[gp_one_ctr, :] = dataPoints[j + w*i, :]
+                        gp_one_ctr = gp_one_ctr + 1
+                    else:
+                        group_two[gp_two_ctr, :] = dataPoints[j + w*i, :]
+                        gp_two_ctr = gp_two_ctr + 1                         
+        
+    elif groupedNo == 2:
+        print('Should found both legs!')
+        
+        # Separate the two groups into group_one and group_two
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == 1:
+                    group_one[gp_one_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_one[gp_one_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_one_ctr = gp_one_ctr + 1
+                elif ptsToBeClassified[i, j] == 2:
+                    group_two[gp_two_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_two_ctr = gp_two_ctr + 1
+    else:
+        print('More than two groups are found')
+        
+        # Find the two groups with the most number of datapoints
+        idx1 = np.argmax(retval_array) + 1 # the number showing in the ptsToBeClassified 
+        retval_array[idx1 - 1] = 0
+        idx2 = np.argmax(retval_array) + 1 # the second number
+        
+        # Separate the two groups into group_one and group_two    
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == idx1:
+                    group_one[gp_one_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_one[gp_one_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_one_ctr = gp_one_ctr + 1
+                elif ptsToBeClassified[i, j] == idx2:
+                    group_two[gp_two_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_two_ctr = gp_two_ctr + 1
+    
+
+   
+    # Remove zero rows
+    group_one = group_one[~np.all(group_one==0, axis=1)]
+    group_two = group_two[~np.all(group_two==0, axis=1)]
+    
+    
+    
+    # Label the left and right leg
+    centroid_one = group_one.mean(0)
+    centroid_two = group_two.mean(0)
+    if(centroid_one[0] > centroid_two[0]):  #group one is the right leg
+        Leg_right = group_one
+        Leg_left = group_two
+    else:
+        Leg_right = group_two
+        Leg_left = group_one
+        
+
+
+
+        
+#    # Debug Plot
+#   # Plot the projected pointcloud 2D image
+#   myMath.plot_points(dataPoints)
+#   # Plot the randomly selected seedPoints
+#   plt.plot(seeds[:, 0], seeds[:, 1], 'r+')
+    
+    # Plot the two left (blue) and right (red) clusters
+#    plt.plot(Leg_right[:, 0], Leg_right[:, 1], 'ro')
+#    plt.plot(Leg_left[:, 0], Leg_left[:, 1], 'bo')
+# 
+#    # Plot the centroid of two legs
+#    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
+#    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
+#    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
+#    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
+    
+    
+    return Leg_right, Leg_left
+
+
+
+
+
+
+
+
+
 
 
 
@@ -195,8 +421,11 @@ while True:
         verts = np.asarray(v).view(np.float32).reshape(-1,3) #xyz
         texcoords = np.asarray(t).view(np.float32).reshape(-1,2) #uv
         
-        
-        
+#        # 2D image display
+#        points2d_x = verts[:, 0]
+#        points2d_y = verts[:, 1]
+#        plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
+
     
         
         ######################################
@@ -214,7 +443,7 @@ while True:
         # Create the Voxel Grid Filter Object
         vox = oriCloud.make_voxel_grid_filter()
         # Choose the voxel (leaf) size
-        LEAF_SIZE = 0.005  # also can set 0.043
+        LEAF_SIZE = 0.005  # unit is in [meter] (also can set 0.043)
         # Set the voxel size on the vox object
         vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
         
@@ -260,7 +489,7 @@ while True:
         FILTER_AXIS = 'z'
         passthrough.set_filter_field_name(FILTER_AXIS)
         AXIS_MIN = 0
-        AXIS_MAX = 0.68
+        AXIS_MAX = 0.9
         passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
             
         # Call the passthrough filter to obtain the resultant pointcloud
@@ -346,10 +575,10 @@ while True:
         outlier = gdRemovedCloud.make_statistical_outlier_filter()
     
         # Set the number of neighboring points to analyze for any given point
-        outlier.set_mean_k(100)
+        outlier.set_mean_k(10)
         
         # Set threshold scale factor
-        outlier_threshold = 0.05
+        outlier_threshold = 0.01
     
         # Eliminate the points whose mean distance is larger than global
         # (global dis = mean_dis + threshold * std_dev)               
@@ -376,6 +605,37 @@ while True:
         
         
         
+
+        
+        
+        
+        
+        ###################################
+        #    Segment left/right leg   #
+        ###################################
+        # Hough Transform
+        # cylinders = cv2.HoughCylinders()
+        
+        
+        # --> unable to segment via RANSAC (maybe because there are two cylinders)
+#        # Create the segmentation object
+#        seg_leg = olRemovedCloud.make_segmenter()
+#    
+#        # Set the model you wish to fit
+#        seg_leg.set_model_type(pcl.SACMODEL_CYLINDER)
+#        seg_leg.set_method_type(pcl.SAC_RANSAC)
+#        
+#        # Set the threshold value
+#        max_distance = 100
+#        seg_leg.set_distance_threshold(max_distance)
+#        
+#        # Obtain a set of inlier indices ( who fit the plane) and model coefficients
+#        inliers_leg, coefficients = seg_leg.segment()
+#        
+#        # Extract Inliers obtained from previous step
+#        LegRemovedCloud = ptCloud.extract(inliers_leg, negative=False)
+  
+
         ##################################
         #     Conver the pcl pointcloud  #
         #    object to numpy array type  #
@@ -383,29 +643,40 @@ while True:
         
         # Convert the pcl pointcloud object to array type
         displayCloud = olRemovedCloud
+        #displayCloud = LegRemovedCloud
         display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
         verts = display_verts
         
+        # Extimate the image width and height
+        w, h, image_2d = myMath.forced_project_to_2Dimage(verts)
         
         
+#        # 2D image display
+#        points2d_x = verts[:, 0]
+#        points2d_y = verts[:, 1]
+#        estimatedImage = verts[0: int(w * h), :]
+#        points2d_x = estimatedImage[:, 0]
+#        points2d_y = estimatedImage[:, 1]
+#        datapoint = estimatedImage.reshape(int(w), int(h), 3)
+#        #plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
+
+
+      
         
-        ###################################
-        #    Classify to left/right leg   #
-        ###################################
+        ############################
+        ## Clustering Testing     #
+        ###########################
+
+#        # Ward hierachical clustering method
+#        ward = AgglomerativeClustering(n_clusters=2, linkage='ward')
+#        ward.fit(verts)
+#        label = ward.labels_
         
-#        # Implement k-mean for classification --> not accurate enough
-#        init_idx = [verts.shape[0] / 2 - 20, verts.shape[0] / 2 + 20]
-#        init_idx = np.array(init_idx)
-#        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
-#        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
-#        k_means.fit(verts)
-#        label = k_means.labels_
         
-#        # Implement minibatch k-means --> same as k-mean
-#        mbk = MiniBatchKMeans(n_clusters = 2)
-#        mbk.fit(verts)
-#        label = mbk.labels_
-#        centers = mbk.cluster_centers_
+        # Floodfill from opencv
+        #floodfillClassifier()
+        
+
         
 #        # Spectral Cluster -> Too slow
 #        spectral_cluster = SpectralClustering(n_clusters = 2)
@@ -418,27 +689,52 @@ while True:
 #        db.fit(verts)
 #        label = db.labels_
         
+
+        
+        
+        
+        #########################
+        #  K-Mean Clustering   #
+        ########################
+#        # Implement k-mean for classification --> not accurate enough
+#        init_idx = [verts.shape[0] / 2 - 150, verts.shape[0] / 2 + 150]
+##        init_idx = [10  , verts.shape[0] - 50]
+#        init_idx = np.array(init_idx)
+#        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
+#        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
+#        k_means.fit(verts)
+#        label = k_means.labels_
+        
+#        # Implement minibatch k-means --> same as k-mean
+#        mbk = MiniBatchKMeans(n_clusters = 2)
+#        mbk.fit(verts)
+#        label = mbk.labels_
+#        centers = mbk.cluster_centers_
+        
+        
+        
+        
         
         ##############################
         # Point Cloud Visuzalization #
         ##############################
         
         
-#        # Draw k-mean initial guess point
+#    # Draw k-mean initial guess point
 #    #    p0 = tuple([verts[init_idx[0], :]])
 #    #    p1 = tuple([verts[init_idx[1], :]])
-#        p0 = verts[init_idx[0], :]
-#        p1 = verts[init_idx[1], :]
-#        color = (0, 0, 255)
-#        pointcloudViewer.line3d_exa(out, p0, p1, color, thickness=50)
+#    p0 = verts[init_idx[0], :]
+#    p1 = verts[init_idx[1], :]
+#    #color = (0, 0, 255)
+#    pointcloudViewer.line3d_exa(out, p0, p1,  thickness=50)
         
         
         
         
-#        # Remove the points which below to group 1
-#        for idx, val in enumerate (label):
-#            if val == 1:
-#                verts[idx, :] = np.zeros(3)
+    # Remove the points which below to group 1 to visualize the clustering result
+#    for idx, val in enumerate (label):
+#        if val == 1:
+#            verts[idx, :] = np.zeros(3)
 
     
     
