@@ -22,14 +22,12 @@ import pointcloudViewer
 import open3d
 # Import k-mean classifier from scikit learn
 from sklearn.cluster import KMeans, MiniBatchKMeans
-from sklearn.cluster import SpectralClustering
-from sklearn.cluster import DBSCAN
-from sklearn.cluster import AgglomerativeClustering
 
 from matplotlib import pyplot as plt
 
-
 import math
+
+# Import my own libraries
 import myMath
 
 
@@ -302,13 +300,8 @@ def floodfillClassifier (verts, loDiff, upDiff):
     
     
     return Leg_right, Leg_left
-
-
-
-
-
-
-
+    
+    
 
 
 
@@ -648,46 +641,28 @@ while True:
         verts = display_verts
         
         # Extimate the image width and height
-        w, h, image_2d = myMath.forced_project_to_2Dimage(verts)
+        #w, h, image_2d = myMath.forced_project_to_2Dimage(verts)
         
-        
-#        # 2D image display
-#        points2d_x = verts[:, 0]
-#        points2d_y = verts[:, 1]
-#        estimatedImage = verts[0: int(w * h), :]
-#        points2d_x = estimatedImage[:, 0]
-#        points2d_y = estimatedImage[:, 1]
-#        datapoint = estimatedImage.reshape(int(w), int(h), 3)
-#        #plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
-
-
-      
         
         ############################
-        ## Clustering Testing     #
+        ## Floodfill Clustering    #
+        #   Find right/left leg    #
         ###########################
-
-#        # Ward hierachical clustering method
-#        ward = AgglomerativeClustering(n_clusters=2, linkage='ward')
-#        ward.fit(verts)
-#        label = ward.labels_
         
         
         # Floodfill from opencv
-        #floodfillClassifier()
+        Leg_right, Leg_left = floodfillClassifier(verts, 2, 2)
+        
+#        #  Convert one of the leg to verts for tmp visualization
+#        verts_leg_left = Leg_left.astype(np.float32)
+#        verts = verts_leg_left
+        
+        
+        
+        
+        
         
 
-        
-#        # Spectral Cluster -> Too slow
-#        spectral_cluster = SpectralClustering(n_clusters = 2)
-#        spectral_cluster.fit(verts)
-#        label = spectral_cluster.labels_
-        
-        
-        # DBSCAN --> unacceptable and too slow
-#        db = DBSCAN()
-#        db.fit(verts)
-#        label = db.labels_
         
 
         
