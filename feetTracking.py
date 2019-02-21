@@ -110,7 +110,6 @@ def floodfillClassifier (verts, loDiff, upDiff):
 
     # Mark the points in the image that are chosen as points in the clusters
     ptsToBeClassified = (dataPoints[:, 2] / 4 * 1000).reshape(int(h), int(w)) # Convert the depth to a larger scale
-    ptsToBeClassified_copy = (dataPoints[:, 2] / 4 * 1000).reshape(int(w), int(h))
     
     # Mask with the size of w+2, h+2 of the target image
     mask = np.zeros([ptsToBeClassified.shape[0] + 2, ptsToBeClassified.shape[1]+2], np.uint8)
@@ -147,12 +146,7 @@ def floodfillClassifier (verts, loDiff, upDiff):
 
     
 
-    
-    # Debug Plot
-    # Plot the projected pointcloud 2D image
-    myMath.plot_points(dataPoints)
-    # Plot the seedPoints
-    plt.plot(seeds[:, 0], seeds[:, 1], 'r+')
+
     
   
     
@@ -174,7 +168,7 @@ def floodfillClassifier (verts, loDiff, upDiff):
         if i > 0: # afer the first iteration, skip the seedpoint if it's already assigned to a group           
             if ptsToBeClassified[seedPoint[0], seedPoint[1]] > seedPointsNo: # Meaning that the seedpoint haven't been clustered yet
 
-                newVal = tuple([groupedNo+1])
+                newVal = tuple([i+1])
                 retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=newVal, loDiff=loDiff, upDiff=upDiff)
                 #print(i, retval)
                 
@@ -196,22 +190,118 @@ def floodfillClassifier (verts, loDiff, upDiff):
         
             
                 
-    # Display the floodfill result
+    # Group the clusters to two groups
+    group_one = np.zeros([w* h, 3])      
+    group_two = np.zeros([w* h, 3])
+    gp_one_ctr = 0
+    gp_two_ctr = 0    
+    
     if groupedNo == 0:
         print('Did not find any group')
+        
+        # Perform floodfill agian
+        floodfillClassifier(verts)
+        
     elif groupedNo == 1:
         print('Only one group is found')
+        
+        # Find the number of elements that is assigned to the cluster
+        elementsNo = 0
+        for i in range(ptsToBeClassified.shape[0]):
+            for j in range(ptsToBeClassified.shape[1]):
+                if ptsToBeClassified[i, j] == 1:
+                    elementsNo = elementsNo + 1
+        
+                
+        # Cut the image from middle base on the x value
+        max_x = dataPoints.max(0)[0]
+        min_x = dataPoints.min(0)[0]
+        middle = (max_x + min_x) / 2
+        
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == 1:
+                    if dataPoints[j + w* i, 0] < middle : # left leg
+                        group_one[gp_one_ctr, :] = dataPoints[j + w*i, :]
+                        gp_one_ctr = gp_one_ctr + 1
+                    else:
+                        group_two[gp_two_ctr, :] = dataPoints[j + w*i, :]
+                        gp_two_ctr = gp_two_ctr + 1                         
+        
     elif groupedNo == 2:
         print('Should found both legs!')
+        
+        # Separate the two groups into group_one and group_two
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == 1:
+                    group_one[gp_one_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_one[gp_one_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_one_ctr = gp_one_ctr + 1
+                elif ptsToBeClassified[i, j] == 2:
+                    group_two[gp_two_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_two_ctr = gp_two_ctr + 1
     else:
         print('More than two groups are found')
+        
+        # Find the two groups with the most number of datapoints
+        idx1 = np.argmax(retval_array) + 1 # the number showing in the ptsToBeClassified 
+        retval_array[idx1 - 1] = 0
+        idx2 = np.argmax(retval_array) + 1 # the second number
+        
+        # Separate the two groups into group_one and group_two    
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == idx1:
+                    group_one[gp_one_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_one[gp_one_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_one_ctr = gp_one_ctr + 1
+                elif ptsToBeClassified[i, j] == idx2:
+                    group_two[gp_two_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_two_ctr = gp_two_ctr + 1
+    
+
+   
+    # Remove zero rows
+    group_one = group_one[~np.all(group_one==0, axis=1)]
+    group_two = group_two[~np.all(group_two==0, axis=1)]
+    
+    
+    
+    # Label the left and right leg
+    centroid_one = group_one.mean(0)
+    centroid_two = group_two.mean(0)
+    if(centroid_one[0] > centroid_two[0]):  #group one is the right leg
+        Leg_right = group_one
+        Leg_left = group_two
+    else:
+        Leg_right = group_two
+        Leg_left = group_one
+        
 
 
 
-
-#####################
-##  Floodfill Test  #
-#####################
+        
+#    # Debug Plot
+#   # Plot the projected pointcloud 2D image
+#   myMath.plot_points(dataPoints)
+#   # Plot the randomly selected seedPoints
+#   plt.plot(seeds[:, 0], seeds[:, 1], 'r+')
+    
+    # Plot the two left (blue) and right (red) clusters
+#    plt.plot(Leg_right[:, 0], Leg_right[:, 1], 'ro')
+#    plt.plot(Leg_left[:, 0], Leg_left[:, 1], 'bo')
+# 
+#    # Plot the centroid of two legs
+#    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
+#    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
+#    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
+#    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
+    
+    
+    return Leg_right, Leg_left
 
 
 
