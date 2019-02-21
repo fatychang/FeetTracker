@@ -98,85 +98,113 @@ def mouse_cb(event, x, y, flags, param):
 #####################
 ##      FloodFill  ##
 #####################
-def floodfillClassifier (verts, mask, seedPoint, newVal, rect, loDiff, upDiff, flags):
+def floodfillClassifier (verts, loDiff, upDiff):
     
     # Convert the pointcloud data into 2D image with approximated width and height
     w, h, image_array = myMath.forced_project_to_2Dimage(verts)   
-    
-
-    
-    
+        
     # Reshape the datapoint and obtain the number of datapoints
     dataPoints = image_array.reshape(-1, 3)
     dataNo = image_array.shape[0] * image_array.shape[1]
 
 
-    # plot the projected pointcloud
-#    myMath.plot_points(dataPoints)
-    
-    
-
     # Mark the points in the image that are chosen as points in the clusters
-    ptsToBeClassifiedBef = dataPoints[:, 2] / 4 * 1000     
-    ptsToBeClassified = ptsToBeClassifiedBef.reshape(int(w), int(h))
-    #mask = np.zeros([int(w)+2, int(h)+2], np.uint8)
+    ptsToBeClassified = (dataPoints[:, 2] / 4 * 1000).reshape(int(h), int(w)) # Convert the depth to a larger scale
+    ptsToBeClassified_copy = (dataPoints[:, 2] / 4 * 1000).reshape(int(w), int(h))
+    
+    # Mask with the size of w+2, h+2 of the target image
     mask = np.zeros([ptsToBeClassified.shape[0] + 2, ptsToBeClassified.shape[1]+2], np.uint8)
-    for i in range(dataNo):
-        coor = int(dataPoints[i, 0] + dataPoints[i, 1] * w)
-#        print coor
-        ptsToBeClassifiedBef[coor] = dataPoints[i, 2]/ 4 * 1000 # Change the depth unit (z value) to [mm]
-    
-    label=[]
-    seedPoint = tuple(image_array[10, h/2, 0:2])
-    seedPoint = image_array[w-10, h/2, 0:2]
-    plt.plot(seedPoint[0], seedPoint[1], 'r+')
-    
-    # Floodfill the image and record clusters with large number of points
-    for i in range(dataNo):
-        seedPoint = tuple([dataPoints[i, 0], dataPoints[i, 1]])
-        retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=0, loDiff=10, upDiff=10)
-        label.append(retval)
-    
-    
-    newVal = (0, 0, 0)
+   
+    # Manually assign the seedPoints (Did not use anymore, change to randomly assign seedpoints)
+#    seedPoint = tuple(image_array[10, 10, 0:2])
+#    
+#    seedPoints = [tuple(image_array[w/4, h/4, 0:2]), tuple(image_array[w/2, h/4, 0:2]), tuple(image_array[3 * w/4, h/4, 0:2]),
+#                tuple(image_array[w/4, h/2, 0:2]), tuple(image_array[w/2, h/2, 0:2]), tuple(image_array[3 * w/4, h/2, 0:2]),
+#                tuple(image_array[w/4, 3 * h/4, 0:2]), tuple(image_array[w/2, 3* h/4, 0:2]), tuple(image_array[3* w/4, 3* h/4, 0:2])]
+#    seedPoint = tuple(seedPoints)
 
     
-    
-    # Mark the points in the image that are chosen as points in the clusters
-    for i in range(dataNo):
-        # Choose the point to be seedPoint
-        seedPoint = tuple([inputdatapoints[i, 0], inputdatapoints[i, 1]])
-        retval, image, mask, rect = cv2.floodFill(inputdatapoints, mask, seedPoint, newVal)
-    
-    
-    
-    
-    
-    datapoints = verts.reshape(int(w), int(h),3)
-    # Define the mask
-    mask = np.zeros([int(w)+2, int(h)+2], np.uint8)
-    seedPoint = None
-    fixedRange = True
-    connectivity = 4
-    
-    # Update floodfill
-    loDiff = 1
-    hiDiff = 1
-    flags = connectivity
-    if fixedRange:
-        flags |= cv2.FLOODFILL_FIXED_RANGE
-    
-    try:
-        tmp = cv2.floodFill(datapoint, mask, seedPoint, (0, 0, 0))
-    except:
-        print("floodfill failed")
-    
-    for i in range(dataNo):
-        seedPoint = inputArray[i, 0]
+    # Randomly select 1% of total datapoints as seedPoints
+    seedPointsNo = int(dataNo/100)
+    seedPoints = np.zeros([seedPointsNo, 2]) # store the x and y index number
+    seeds = np.zeros([seedPointsNo, 2]) # store the acutal x and y value of the seedpoints
+    for i in range(0, seedPointsNo):
 
-    newVal = (0)
-    retval, image, mask, rect = cv2.floodFill(verts, mask, seedPoint, newVal)
+        # Here is a tricky way to avoid the dimension overfit problem which I haven't solve.
+        # (If i select the seedpoints based on the max number of rows and column individaully,
+        # later in the cv.floodfill will incounter the problem suggesting that the seeds are outside the image)
+        if h > w:
+            random_index1 = np.random.randint(1, w-1) # rows
+            random_index2 = np.random.randint(1, w-1) # columns
+        else:
+            random_index1 = np.random.randint(1, h-1) # rows
+            random_index2 = np.random.randint(1, h-1) # columns            
+            
 
+        seedPoints[i, :] = [random_index1, random_index2]
+        seeds[i, :] = dataPoints[random_index2 + random_index1 * w, 0:2]
+    
+
+    
+
+    
+    # Debug Plot
+    # Plot the projected pointcloud 2D image
+    myMath.plot_points(dataPoints)
+    # Plot the seedPoints
+    plt.plot(seeds[:, 0], seeds[:, 1], 'r+')
+    
+  
+    
+    # Prepare to run floodfill from all the selected seedpoints
+    skippedNo=0         # the number of seedpoints that are being skipped
+    groupedNo = 0       # the number of groups that is clustered (ideally, should be two)     
+    retval_array = np.zeros(seedPointsNo)   # store the number of points in each cluster    
+    
+    for i in range(seedPointsNo):
+        
+        # Extract the seedPoint from the seedPoints array
+        seedPoint = int(seedPoints[i,0]), int(seedPoints[i, 1])
+        # Clear the retval in case the selected seedPoint is skipped
+        retval = 0
+              
+        #print ptsToBeClassified[seedPoint[0], seedPoint[1]]        # the depth value of the seedpoint itself
+        
+        # Skip the seedpoints that already been clustered        
+        if i > 0: # afer the first iteration, skip the seedpoint if it's already assigned to a group           
+            if ptsToBeClassified[seedPoint[0], seedPoint[1]] > seedPointsNo: # Meaning that the seedpoint haven't been clustered yet
+
+                newVal = tuple([groupedNo+1])
+                retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=newVal, loDiff=loDiff, upDiff=upDiff)
+                #print(i, retval)
+                
+            else: # Skip the seedpoint when it is already been clustered
+                skippedNo = skippedNo + 1
+        else: # Run the first floodfill with the first seedpoint
+            retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=1, loDiff=loDiff, upDiff=upDiff)
+            #print(i, retval)
+        
+        # Calculate the number of groups (what if the first seedpoint failed to group?)
+        if retval != 0:
+            groupedNo = groupedNo + 1
+        
+        # Break the loop when all the datapoints are grouped
+        retval_array[i] = retval
+        if sum(retval_array) == dataNo :
+            break
+     ## End of running floodfill ##   
+        
+            
+                
+    # Display the floodfill result
+    if groupedNo == 0:
+        print('Did not find any group')
+    elif groupedNo == 1:
+        print('Only one group is found')
+    elif groupedNo == 2:
+        print('Should found both legs!')
+    else:
+        print('More than two groups are found')
 
 
 
