@@ -47,4 +47,8 @@ def mouse_cb(event, x, y, flags, param):
 ```
 ## myMath.py
 This script handles some self-defined functions related to simple math. The following are the callable functions:
-- findwidthHeight(): Obtain the estimated width and height of an pointcloud data stored in the numpy array.
+
+- **forced_project_to_2Dimage()**: From the point cloud datapoint (which belongs to dataPoints * 3) to obtain a 2D image by using the estimated image width and height.
+
+- **plot_points()**: A simple visualization method to plot the 2D image (x and y) converted from point cloud
+
