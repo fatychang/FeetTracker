@@ -96,7 +96,7 @@ def mouse_cb(event, x, y, flags, param):
 #####################
 ##      FloodFill  ##
 #####################
-def floodfillClassifier (verts, loDiff, upDiff):
+def floodfillClassifier (verts, loDiff=3, upDiff=3):
     
     # Convert the pointcloud data into 2D image with approximated width and height
     w, h, image_array = myMath.forced_project_to_2Dimage(verts)   
@@ -111,14 +111,7 @@ def floodfillClassifier (verts, loDiff, upDiff):
     
     # Mask with the size of w+2, h+2 of the target image
     mask = np.zeros([ptsToBeClassified.shape[0] + 2, ptsToBeClassified.shape[1]+2], np.uint8)
-   
-    # Manually assign the seedPoints (Did not use anymore, change to randomly assign seedpoints)
-#    seedPoint = tuple(image_array[10, 10, 0:2])
-#    
-#    seedPoints = [tuple(image_array[w/4, h/4, 0:2]), tuple(image_array[w/2, h/4, 0:2]), tuple(image_array[3 * w/4, h/4, 0:2]),
-#                tuple(image_array[w/4, h/2, 0:2]), tuple(image_array[w/2, h/2, 0:2]), tuple(image_array[3 * w/4, h/2, 0:2]),
-#                tuple(image_array[w/4, 3 * h/4, 0:2]), tuple(image_array[w/2, 3* h/4, 0:2]), tuple(image_array[3* w/4, 3* h/4, 0:2])]
-#    seedPoint = tuple(seedPoints)
+
 
     
     # Randomly select 1% of total datapoints as seedPoints
@@ -142,11 +135,6 @@ def floodfillClassifier (verts, loDiff, upDiff):
         seeds[i, :] = dataPoints[random_index2 + random_index1 * w, 0:2]
     
 
-    
-
-
-    
-  
     
     # Prepare to run floodfill from all the selected seedpoints
     skippedNo=0         # the number of seedpoints that are being skipped
@@ -216,15 +204,24 @@ def floodfillClassifier (verts, loDiff, upDiff):
         min_x = dataPoints.min(0)[0]
         middle = (max_x + min_x) / 2
         
+#        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+#            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+#                if ptsToBeClassified[i, j] == 1:
+#                    if dataPoints[j + w* i, 0] < middle : # left leg
+#                        group_one[gp_one_ctr, :] = dataPoints[j + w*i, :]
+#                        gp_one_ctr = gp_one_ctr + 1
+#                    else:
+#                        group_two[gp_two_ctr, :] = dataPoints[j + w*i, :]
+#                        gp_two_ctr = gp_two_ctr + 1    
         for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
             for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
-                if ptsToBeClassified[i, j] == 1:
-                    if dataPoints[j + w* i, 0] < middle : # left leg
-                        group_one[gp_one_ctr, :] = dataPoints[j + w*i, :]
-                        gp_one_ctr = gp_one_ctr + 1
-                    else:
-                        group_two[gp_two_ctr, :] = dataPoints[j + w*i, :]
-                        gp_two_ctr = gp_two_ctr + 1                         
+                if dataPoints[j + w* i, 0] < middle : # left leg
+                    group_one[gp_one_ctr, :] = dataPoints[j + w*i, :]
+                    gp_one_ctr = gp_one_ctr + 1
+                else:
+                    group_two[gp_two_ctr, :] = dataPoints[j + w*i, :]
+                    gp_two_ctr = gp_two_ctr + 1          
+
         
     elif groupedNo == 2:
         print('Should found both legs!')
@@ -236,7 +233,7 @@ def floodfillClassifier (verts, loDiff, upDiff):
                     group_one[gp_one_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
                     group_one[gp_one_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
                     gp_one_ctr = gp_one_ctr + 1
-                elif ptsToBeClassified[i, j] == 2:
+                elif ptsToBeClassified[i, j] != 1 and ptsToBeClassified[i, j] < seedPointsNo:
                     group_two[gp_two_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
                     group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
                     gp_two_ctr = gp_two_ctr + 1
@@ -283,30 +280,24 @@ def floodfillClassifier (verts, loDiff, upDiff):
 
         
 #    # Debug Plot
-#   # Plot the projected pointcloud 2D image
-#   myMath.plot_points(dataPoints)
-#   # Plot the randomly selected seedPoints
-#   plt.plot(seeds[:, 0], seeds[:, 1], 'r+')
+#    # Plot the projected pointcloud 2D image
+    myMath.plot_points(dataPoints)
+#    # Plot the randomly selected seedPoints
+#    plt.plot(seeds[:, 0], seeds[:, 1], 'r+')
     
     # Plot the two left (blue) and right (red) clusters
-#    plt.plot(Leg_right[:, 0], Leg_right[:, 1], 'ro')
-#    plt.plot(Leg_left[:, 0], Leg_left[:, 1], 'bo')
+    plt.plot(Leg_right[:, 0], Leg_right[:, 1], 'ro')
+    plt.plot(Leg_left[:, 0], Leg_left[:, 1], 'bo')
 # 
 #    # Plot the centroid of two legs
-#    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
-#    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
-#    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
-#    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
+    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
+    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
+
     
     
     return Leg_right, Leg_left
     
-    
-
-
-
-
-
+ 
 
 ####################################################
 ##           Initialization -                     ##      
@@ -316,6 +307,9 @@ def floodfillClassifier (verts, loDiff, upDiff):
 # Flag setting
 SAVE_IMAGE = False
 IS_DEBUG = False
+
+# fps frame counter initialization
+fpsFrameCnt = 0
 
 
 
@@ -370,6 +364,52 @@ out = np.empty((h, w, 3), dtype=np.uint8)
 
 
 
+#############################
+#   Debug                   #
+# Obtain a certain frame    #
+############################
+
+required_frame_number = 0
+for i in range(required_frame_number):
+    frames = pipeline.wait_for_frames()
+    # Get depth frame
+    depth_frame = frames.get_depth_frame()
+        
+    depth_frame = decimate.process(depth_frame)
+        
+    # Grab new intrinsics (may be changed by decimation)
+    depth_intrinsics = rs.video_stream_profile(depth_frame.profile).get_intrinsics()
+    w, h = depth_intrinsics.width, depth_intrinsics.height
+        
+        
+    # Get the depth frame data
+    depth_image = np.asanyarray(depth_frame.get_data())
+    
+        
+    # Get the depth color map
+    depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
+        
+    # Obtain the mapped frame and color_source
+    mapped_frame, color_source = depth_frame, depth_colormap    
+        
+    # Calculate the points from the depth_frame
+    points = pc.calculate(depth_frame)
+    pc.map_to(mapped_frame)
+        
+    # Pointcloud data to numpy array
+    v,t = points.get_vertices(), points.get_texture_coordinates()
+    verts = np.asarray(v).view(np.float32).reshape(-1,3) #xyz
+    texcoords = np.asarray(t).view(np.float32).reshape(-1,2) #uv      
+
+
+
+
+
+
+
+
+
+
 #######################
 #    Stream loop      #
 #######################
@@ -379,9 +419,14 @@ while True:
     
     # Render
     now = time.time()
+
     
     # Grab camera data
     if not state.paused:
+        
+        # Counter for the frame
+        fpsFrameCnt +=1
+        
         # Get the frames from pipeline
         frames = pipeline.wait_for_frames()
         
@@ -651,14 +696,16 @@ while True:
         
         
         # Floodfill from opencv
-        Leg_right, Leg_left = floodfillClassifier(verts, 2, 2)
+        Leg_right, Leg_left = floodfillClassifier(verts, 3, 3)
         
 #        #  Convert one of the leg to verts for tmp visualization
 #        verts_leg_left = Leg_left.astype(np.float32)
 #        verts = verts_leg_left
         
+        verts_leg_right = Leg_right.astype(np.float32)
+        verts = verts_leg_right
         
-        
+            
         
         
         
@@ -740,8 +787,8 @@ while True:
     dt = time.time() - now
 
     cv2.setWindowTitle(
-        state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) %s" %
-        (w, h, 1.0/dt, dt*1000, "PAUSED" if state.paused else ""))
+        state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) frame:%d  %s" %
+        (w, h, 1.0/dt, dt*1000, fpsFrameCnt, "PAUSED" if state.paused else ""))
 
     cv2.imshow(state.WIN_NAME, out)
     key = cv2.waitKey(1)
