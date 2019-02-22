@@ -23,6 +23,9 @@ Keyboard:
     [s]     Save PNG (./out.png)
     [e]     Export points to ply (./out.ply)
     [q\ESC] Quit
+    
+    
+    [a]     press [a] when it is pause, start to display frame by frame
 """
 
 import math
@@ -45,6 +48,8 @@ class AppState:
         self.decimate = 1
         self.scale = False
         self.color = True
+        self.per_frame = False
+        
 
     def reset(self):
         self.pitch, self.yaw, self.distance = 0, 0, 2
@@ -150,6 +155,20 @@ def line3d(out, pt1, pt2, color=(0x80, 0x80, 0x80), thickness=1):
         cv2.line(out, p0, p1, color, thickness, cv2.LINE_AA)
 
 
+def line3d_exa(out, pt1, pt2, color=(0x80, 0x80, 0x80), thickness=1):
+    """draw a 3d line from pt1 to pt2"""
+    p0 = project(out, pt1.reshape(-1, 3))[0]
+    p1 = project(out, pt2.reshape(-1, 3))[0]
+    if np.isnan(p0).any() or np.isnan(p1).any():
+        return
+    p0 = tuple(p0.astype(int))
+    p1 = tuple(p1.astype(int))
+    print(p0)
+    cv2.line(out, p0,  p1, color, thickness, cv2.LINE_AA)
+
+
+
+
 def grid(state, out, pos, rotation=np.eye(3), size=1, n=10, color=(0x80, 0x80, 0x80)):
     """draw a grid on xz plane"""
     pos = np.array(pos)
@@ -225,6 +244,7 @@ def pointcloud(state, out, verts, texcoords, color, painter=True):
     
     print("m: ", m.shape)
 
+
     cw, ch = color.shape[:2][::-1]
     if painter:
         # sort texcoord with same indices as above
@@ -239,4 +259,6 @@ def pointcloud(state, out, verts, texcoords, color, painter=True):
 
     # perform uv-mapping
     out[i[m], j[m]] = color[u[m], v[m]]
+    
+    return m.size
 
