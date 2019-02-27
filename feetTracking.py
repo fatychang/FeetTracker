@@ -183,13 +183,13 @@ def floodfillClassifier (verts, loDiff=3, upDiff=3):
     gp_two_ctr = 0    
     
     if groupedNo == 0:
-        print('Did not find any group')
+#        print('Did not find any group')
         
         # Perform floodfill agian
         floodfillClassifier(verts)
         
     elif groupedNo == 1:
-        print('Only one group is found')
+#        print('Only one group is found')
         
         # Find the number of elements that is assigned to the cluster
         elementsNo = 0
@@ -224,7 +224,7 @@ def floodfillClassifier (verts, loDiff=3, upDiff=3):
 
         
     elif groupedNo == 2:
-        print('Should found both legs!')
+#        print('Should found both legs!')
         
         # Separate the two groups into group_one and group_two
         for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
@@ -238,7 +238,7 @@ def floodfillClassifier (verts, loDiff=3, upDiff=3):
                     group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
                     gp_two_ctr = gp_two_ctr + 1
     else:
-        print('More than two groups are found')
+#        print('More than two groups are found')
         
         # Find the two groups with the most number of datapoints
         idx1 = np.argmax(retval_array) + 1 # the number showing in the ptsToBeClassified 
@@ -357,8 +357,19 @@ cv2.namedWindow(state.WIN_NAME, cv2.WINDOW_AUTOSIZE)
 cv2.resizeWindow(state.WIN_NAME, w, h)
 cv2.setMouseCallback(state.WIN_NAME, mouse_cb)
 
-# Create param 'out' to store the frame data
-out = np.empty((h, w, 3), dtype=np.uint8)
+# Create the canvus to store the projected 2D image of pointcloud with color info. in the third dimension
+out = np.empty((h, w, 3), dtype=np.uint8)           # store the unclustered pointcloud
+out_left = np.empty((h, w, 3), dtype=np.uint8)      # store the left leg cluster pointcloud
+out_right = np.empty((h, w, 3), dtype= np.uint8)    # store the right leg cluster pointcloud
+
+# Color map
+pure_color_blue = np.zeros([h, w, 3]) # blue represents left leg
+pure_color_red = np.zeros([h, w, 3]) # red represents right leg
+# Assign the same color to all the array elements    
+for i in range(h):
+    for j in range(w):
+        pure_color_blue[i, j] = [255, 0, 0] # Color in opencv is ordered in BGR sequence
+        pure_color_red[i, j] = [0, 0, 255] # Color in opencv is ordered in BGR sequence
 
 
 
@@ -698,12 +709,9 @@ while True:
         # Floodfill from opencv
         Leg_right, Leg_left = floodfillClassifier(verts, 3, 3)
         
-#        #  Convert one of the leg to verts for tmp visualization
-#        verts_leg_left = Leg_left.astype(np.float32)
-#        verts = verts_leg_left
-        
+        #  Convert the leg clusters to the correct format for visualization            
+        verts_leg_left = Leg_left.astype(np.float32)
         verts_leg_right = Leg_right.astype(np.float32)
-        verts = verts_leg_right
         
             
         
@@ -880,12 +888,9 @@ while True:
             # Floodfill from opencv
             Leg_right, Leg_left = floodfillClassifier(verts, 3, 3)
             
-    #        #  Convert one of the leg to verts for tmp visualization
-    #        verts_leg_left = Leg_left.astype(np.float32)
-    #        verts = verts_leg_left
-            
+            #  Convert the leg clusters to the correct format for visualization            
+            verts_leg_left = Leg_left.astype(np.float32)
             verts_leg_right = Leg_right.astype(np.float32)
-            verts = verts_leg_right
             
             # Stop the processing 
             state.per_frame = False
@@ -897,6 +902,7 @@ while True:
         
         
         
+          
         
         
         
@@ -905,20 +911,30 @@ while True:
         
         
         
-        
+######################################
+##      Point cloud visualization   ##
+######################################
+    
+#    out.fill(0)     # fill the array with zeros
+    out_left.fill(0)
+    out_right.fill(0)
+    
+#    pointcloudViewer.grid(state, out, (0, 0.5, 1), size=1, n=10)
+#    pointcloudViewer.frustum(state, out, depth_intrinsics)
+#    pointcloudViewer.axes(out, pointcloudViewer.view(state, [0, 0, 0]), state.rotation, size=0.1, thickness=1)
 
-    
-    
 
-    out.fill(0)
-    
-    pointcloudViewer.grid(state, out, (0, 0.5, 1), size=1, n=10)
-    pointcloudViewer.frustum(state, out, depth_intrinsics)
-    pointcloudViewer.axes(out, pointcloudViewer.view(state, [0, 0, 0]), state.rotation, size=0.1, thickness=1)
 
     if not state.scale or out.shape[:2] == (h, w):
-        pointcloudViewer.pointcloud(state, out, verts, texcoords, color_source)
-    else:
+#        pointcloudViewer.pointcloud(state, out, verts, texcoords, color_source)
+        pointcloudViewer.pointcloud(state, out_left, verts_leg_left, texcoords, pure_color_blue)
+        pointcloudViewer.pointcloud(state, out_right, verts_leg_right, texcoords, pure_color_red)
+ 
+        # Overlap the two output matrix
+        masked = out_left | out_right
+
+         
+    else: #assume it won't go in here
         tmp = np.zeros((h, w, 3), dtype=np.uint8)
         pointcloudViewer.pointcloud(state, tmp, verts, texcoords, color_source)
         tmp = cv2.resize(
@@ -930,12 +946,17 @@ while True:
 
     dt = time.time() - now
 
+    w, h = masked.shape[:2]
+
     cv2.setWindowTitle(
         state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) frame:%d  %s" %
         (w, h, 1.0/dt, dt*1000, fpsFrameCnt, "PAUSED" if state.paused else ""))
 
-    cv2.imshow(state.WIN_NAME, out)
+#    cv2.imshow(state.WIN_NAME, out)
+    cv2.imshow(state.WIN_NAME, masked)
     key = cv2.waitKey(1) # display the frame for 1ms and close it
+    
+
 
     if key == ord("r"):
         state.reset()
