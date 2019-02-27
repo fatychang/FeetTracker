@@ -1,72 +1,48 @@
-# License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2015-2017 Intel Corporation. All Rights Reserved.
-
+# -*- coding: utf-8 -*-
 """
-OpenCV and Numpy Point cloud Software Renderer
-
-This sample is mostly for demonstration and educational purposes.
-It really doesn't offer the quality or performance that can be
-achieved with hardware acceleration.
-
-Usage:
-------
-Mouse: 
-    Drag with left button to rotate around pivot (thick small axes), 
-    with right button to translate and the wheel to zoom.
-
-Keyboard: 
-    [p]     Pause
-    [r]     Reset View
-    [d]     Cycle through decimation values
-    [z]     Toggle point scaling
-    [c]     Toggle color source
-    [s]     Save PNG (./out.png)
-    [e]     Export points to ply (./out.ply)
-    [q\ESC] Quit
-    
-    
-    [a]     press [a] when it is pause, start to display frame by frame
+Created on Thu Jan 24 11:46:45 2019
+This script aims to implement image clustering, segmentation technique
+to achieve the feetTracking function
+@author: jschang
 """
+
+# First import library
+import pyrealsense2 as rs
+# Import Numpy for easy array manipulation
+import numpy as np
+# Import OpenCV for easy image rendering
+import cv2
+# Import PCL for filtering
+import pcl
+# Import time packages for pointcloud rendering
+import time
+# Import pointcloud viewer.py
+import pointcloudViewer
+# Import open3d for visualization
+import open3d
+# Import k-mean classifier from scikit learn
+from sklearn.cluster import KMeans, MiniBatchKMeans
+
+from matplotlib import pyplot as plt
 
 import math
-import cv2
-import numpy as np
-import pyrealsense2 as rs
+
+# Import my own libraries
+import myMath
 
 
 
-class AppState:
 
-    def __init__(self, *args, **kwargs):
-        self.WIN_NAME = 'RealSense'
-        self.pitch, self.yaw = math.radians(-10), math.radians(-15)
-        self.translation = np.array([0, 0, -1], dtype=np.float32)
-        self.distance = 2
-        self.prev_mouse = 0, 0
-        self.mouse_btns = [False, False, False]
-        self.paused = False
-        self.decimate = 1
-        self.scale = False
-        self.color = True
-        self.per_frame = False
-        
+#############################
+# Point Cloud Visualzation  #
+#    Setting                #
+#############################
 
-    def reset(self):
-        self.pitch, self.yaw, self.distance = 0, 0, 2
-        self.translation[:] = 0, 0, -1
+# Create AppState object for pointcloud visualization
+state = pointcloudViewer.AppState()    
 
-    @property
-    def rotation(self):
-        Rx, _ = cv2.Rodrigues((self.pitch, 0, 0))
-        Ry, _ = cv2.Rodrigues((0, self.yaw, 0))
-        return np.dot(Ry, Rx).astype(np.float32)
-
-    @property
-    def pivot(self):
-        return self.translation + np.array((0, 0, self.distance), dtype=np.float32)
-
-
-def mouse_cb(state, out, event, x, y, flags, param):
+# Define mouse motion event
+def mouse_cb(event, x, y, flags, param):
 
     if event == cv2.EVENT_LBUTTONDOWN:
         state.mouse_btns[0] = True
@@ -112,153 +88,888 @@ def mouse_cb(state, out, event, x, y, flags, param):
     state.prev_mouse = (x, y)
 
 
-def init_windows(state, w ,h):
-    cv2.namedWindow(state.WIN_NAME, cv2.WINDOW_AUTOSIZE)
-    cv2.resizeWindow(state.WIN_NAME, w, h)
-    cv2.setMouseCallback(state.WIN_NAME, mouse_cb)
 
 
 
 
-def project(out, v):
-    """project 3d vector array to 2d"""
-    h, w = out.shape[:2]
-    view_aspect = float(h)/w
 
-    # ignore divide by zero for invalid depth
-    with np.errstate(divide='ignore', invalid='ignore'):
-        proj = v[:, :-1] / v[:, -1, np.newaxis] * \
-            (w*view_aspect, h) + (w/2.0, h/2.0)
-
-    # near clipping
-    znear = 0.03
-    proj[v[:, 2] < znear] = np.nan
-    return proj
-
-
-def view(state, v):
-    """apply view transformation on vector array"""
-    return np.dot(v - state.pivot, state.rotation) + state.pivot - state.translation
-
-
-def line3d(out, pt1, pt2, color=(0x80, 0x80, 0x80), thickness=1):
-    """draw a 3d line from pt1 to pt2"""
-    p0 = project(out, pt1.reshape(-1, 3))[0]
-    p1 = project(out, pt2.reshape(-1, 3))[0]
-    if np.isnan(p0).any() or np.isnan(p1).any():
-        return
-    p0 = tuple(p0.astype(int))
-    p1 = tuple(p1.astype(int))
-    rect = (0, 0, out.shape[1], out.shape[0])
-    inside, p0, p1 = cv2.clipLine(rect, p0, p1)
-    if inside:
-        cv2.line(out, p0, p1, color, thickness, cv2.LINE_AA)
-
-
-def line3d_exa(out, pt1, pt2, color=(0x80, 0x80, 0x80), thickness=1):
-    """draw a 3d line from pt1 to pt2"""
-    p0 = project(out, pt1.reshape(-1, 3))[0]
-    p1 = project(out, pt2.reshape(-1, 3))[0]
-    if np.isnan(p0).any() or np.isnan(p1).any():
-        return
-    p0 = tuple(p0.astype(int))
-    p1 = tuple(p1.astype(int))
-    print(p0)
-    cv2.line(out, p0,  p1, color, thickness, cv2.LINE_AA)
-
-
-
-
-def grid(state, out, pos, rotation=np.eye(3), size=1, n=10, color=(0x80, 0x80, 0x80)):
-    """draw a grid on xz plane"""
-    pos = np.array(pos)
-    s = size / float(n)
-    s2 = 0.5 * size
-    for i in range(0, n+1):
-        x = -s2 + i*s
-        line3d(out, view(state ,pos + np.dot((x, 0, -s2), rotation)),
-               view(state, pos + np.dot((x, 0, s2), rotation)), color)
-    for i in range(0, n+1):
-        z = -s2 + i*s
-        line3d(out, view(state, pos + np.dot((-s2, 0, z), rotation)),
-               view(state, pos + np.dot((s2, 0, z), rotation)), color)
-
-
-def axes(out, pos, rotation=np.eye(3), size=0.075, thickness=2):
-    """draw 3d axes"""
-    line3d(out, pos, pos +
-           np.dot((0, 0, size), rotation), (0xff, 0, 0), thickness)
-    line3d(out, pos, pos +
-           np.dot((0, size, 0), rotation), (0, 0xff, 0), thickness)
-    line3d(out, pos, pos +
-           np.dot((size, 0, 0), rotation), (0, 0, 0xff), thickness)
-
-
-def frustum(state, out, intrinsics, color=(0x40, 0x40, 0x40)):
-    """draw camera's frustum"""
-    orig = view(state, [0, 0, 0])
-    w, h = intrinsics.width, intrinsics.height
-
-    for d in range(1, 6, 2):
-        def get_point(x, y):
-            p = rs.rs2_deproject_pixel_to_point(intrinsics, [x, y], d)
-            line3d(out, orig, view(state, p), color)
-            return p
-
-        top_left = get_point(0, 0)
-        top_right = get_point(w, 0)
-        bottom_right = get_point(w, h)
-        bottom_left = get_point(0, h)
-
-        line3d(out, view(state, top_left), view(state, top_right), color)
-        line3d(out, view(state, top_right), view(state, bottom_right), color)
-        line3d(out, view(state, bottom_right), view(state, bottom_left), color)
-        line3d(out, view(state, bottom_left), view(state, top_left), color)
-
-
-def pointcloud(state, out, verts, texcoords, color, painter=True):
-    """draw point cloud with optional painter's algorithm"""
-    if painter:
-        # Painter's algo, sort points from back to front
-
-        # get reverse sorted indices by z (in view-space)
-        # https://gist.github.com/stevenvo/e3dad127598842459b68
-        v = view(state, verts)
-        s = v[:, 2].argsort()[::-1]
-        proj = project(out, v[s])
-    else:
-        proj = project(out, view(state, verts))
-
-    if state.scale:
-        proj *= 0.5**state.decimate
-
-    h, w = out.shape[:2]
-
-    # proj now contains 2d image coordinates
-    j, i = proj.astype(np.uint32).T
-
-    # create a mask to ignore out-of-bound indices
-    im = (i >= 0) & (i < h)
-    jm = (j >= 0) & (j < w)
-    m = im & jm
+#####################
+##      FloodFill  ##
+#####################
+def floodfillClassifier (verts, loDiff=3, upDiff=3):
     
-    print("m: ", m.shape)
+    # Convert the pointcloud data into 2D image with approximated width and height
+    w, h, image_array = myMath.forced_project_to_2Dimage(verts)   
+        
+    # Reshape the datapoint and obtain the number of datapoints
+    dataPoints = image_array.reshape(-1, 3)
+    dataNo = image_array.shape[0] * image_array.shape[1]
 
 
-    cw, ch = color.shape[:2][::-1]
-    if painter:
-        # sort texcoord with same indices as above
-        # texcoords are [0..1] and relative to top-left pixel corner,
-        # multiply by size and add 0.5 to center
-        v, u = (texcoords[s] * (cw, ch) + 0.5).astype(np.uint32).T
-    else:
-        v, u = (texcoords * (cw, ch) + 0.5).astype(np.uint32).T
-    # clip texcoords to image
-    np.clip(u, 0, ch-1, out=u)
-    np.clip(v, 0, cw-1, out=v)
-
-    # perform uv-mapping
-    out[i[m], j[m]] = color[u[m], v[m]]
+    # Mark the points in the image that are chosen as points in the clusters
+    ptsToBeClassified = (dataPoints[:, 2] / 4 * 1000).reshape(int(h), int(w)) # Convert the depth to a larger scale
     
-    return m.size
+    # Mask with the size of w+2, h+2 of the target image
+    mask = np.zeros([ptsToBeClassified.shape[0] + 2, ptsToBeClassified.shape[1]+2], np.uint8)
 
+
+    
+    # Randomly select 1% of total datapoints as seedPoints
+    seedPointsNo = int(dataNo/100)
+    seedPoints = np.zeros([seedPointsNo, 2]) # store the x and y index number
+    seeds = np.zeros([seedPointsNo, 2]) # store the acutal x and y value of the seedpoints
+    for i in range(0, seedPointsNo):
+
+        # Here is a tricky way to avoid the dimension overfit problem which I haven't solve.
+        # (If i select the seedpoints based on the max number of rows and column individaully,
+        # later in the cv.floodfill will incounter the problem suggesting that the seeds are outside the image)
+        if h > w:
+            random_index1 = np.random.randint(1, w-1) # rows
+            random_index2 = np.random.randint(1, w-1) # columns
+        else:
+            random_index1 = np.random.randint(1, h-1) # rows
+            random_index2 = np.random.randint(1, h-1) # columns            
+            
+
+        seedPoints[i, :] = [random_index1, random_index2]
+        seeds[i, :] = dataPoints[random_index2 + random_index1 * w, 0:2]
+    
+
+    
+    # Prepare to run floodfill from all the selected seedpoints
+    skippedNo=0         # the number of seedpoints that are being skipped
+    groupedNo = 0       # the number of groups that is clustered (ideally, should be two)     
+    retval_array = np.zeros(seedPointsNo)   # store the number of points in each cluster    
+    
+    for i in range(seedPointsNo):
+        
+        # Extract the seedPoint from the seedPoints array
+        seedPoint = int(seedPoints[i,0]), int(seedPoints[i, 1])
+        # Clear the retval in case the selected seedPoint is skipped
+        retval = 0
+              
+        #print ptsToBeClassified[seedPoint[0], seedPoint[1]]        # the depth value of the seedpoint itself
+        
+        # Skip the seedpoints that already been clustered        
+        if i > 0: # afer the first iteration, skip the seedpoint if it's already assigned to a group           
+            if ptsToBeClassified[seedPoint[0], seedPoint[1]] > seedPointsNo: # Meaning that the seedpoint haven't been clustered yet
+
+                newVal = tuple([i+1])
+                retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=newVal, loDiff=loDiff, upDiff=upDiff)
+                #print(i, retval)
+                
+            else: # Skip the seedpoint when it is already been clustered
+                skippedNo = skippedNo + 1
+        else: # Run the first floodfill with the first seedpoint
+            retval, image, mask, rect = cv2.floodFill(ptsToBeClassified, mask, seedPoint, newVal=1, loDiff=loDiff, upDiff=upDiff)
+            #print(i, retval)
+        
+        # Calculate the number of groups (what if the first seedpoint failed to group?)
+        if retval != 0:
+            groupedNo = groupedNo + 1
+        
+        # Break the loop when all the datapoints are grouped
+        retval_array[i] = retval
+        if sum(retval_array) == dataNo :
+            break
+     ## End of running floodfill ##   
+        
+            
+                
+    # Group the clusters to two groups
+    group_one = np.zeros([w* h, 3])      
+    group_two = np.zeros([w* h, 3])
+    gp_one_ctr = 0
+    gp_two_ctr = 0    
+    
+    if groupedNo == 0:
+        print('Did not find any group')
+        
+        # Perform floodfill agian
+        floodfillClassifier(verts)
+        
+    elif groupedNo == 1:
+        print('Only one group is found')
+        
+        # Find the number of elements that is assigned to the cluster
+        elementsNo = 0
+        for i in range(ptsToBeClassified.shape[0]):
+            for j in range(ptsToBeClassified.shape[1]):
+                if ptsToBeClassified[i, j] == 1:
+                    elementsNo = elementsNo + 1
+        
+                
+        # Cut the image from middle base on the x value
+        max_x = dataPoints.max(0)[0]
+        min_x = dataPoints.min(0)[0]
+        middle = (max_x + min_x) / 2
+        
+#        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+#            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+#                if ptsToBeClassified[i, j] == 1:
+#                    if dataPoints[j + w* i, 0] < middle : # left leg
+#                        group_one[gp_one_ctr, :] = dataPoints[j + w*i, :]
+#                        gp_one_ctr = gp_one_ctr + 1
+#                    else:
+#                        group_two[gp_two_ctr, :] = dataPoints[j + w*i, :]
+#                        gp_two_ctr = gp_two_ctr + 1    
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if dataPoints[j + w* i, 0] < middle : # left leg
+                    group_one[gp_one_ctr, :] = dataPoints[j + w*i, :]
+                    gp_one_ctr = gp_one_ctr + 1
+                else:
+                    group_two[gp_two_ctr, :] = dataPoints[j + w*i, :]
+                    gp_two_ctr = gp_two_ctr + 1          
+
+        
+    elif groupedNo == 2:
+        print('Should found both legs!')
+        
+        # Separate the two groups into group_one and group_two
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == 1:
+                    group_one[gp_one_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_one[gp_one_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_one_ctr = gp_one_ctr + 1
+                elif ptsToBeClassified[i, j] != 1 and ptsToBeClassified[i, j] < seedPointsNo:
+                    group_two[gp_two_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_two_ctr = gp_two_ctr + 1
+    else:
+        print('More than two groups are found')
+        
+        # Find the two groups with the most number of datapoints
+        idx1 = np.argmax(retval_array) + 1 # the number showing in the ptsToBeClassified 
+        retval_array[idx1 - 1] = 0
+        idx2 = np.argmax(retval_array) + 1 # the second number
+        
+        # Separate the two groups into group_one and group_two    
+        for i in range(ptsToBeClassified.shape[0]):  # Row index of the flooded image
+            for j in range(ptsToBeClassified.shape[1]):  # Column index of the flooded image
+                if ptsToBeClassified[i, j] == idx1:
+                    group_one[gp_one_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_one[gp_one_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_one_ctr = gp_one_ctr + 1
+                elif ptsToBeClassified[i, j] == idx2:
+                    group_two[gp_two_ctr, 2] = dataPoints[j + w* i, 2] # Store the z value
+                    group_two[gp_two_ctr, 0:2] = dataPoints[j + w* i, 0:2]  # Store the x and y value
+                    gp_two_ctr = gp_two_ctr + 1
+    
+
+   
+    # Remove zero rows
+    group_one = group_one[~np.all(group_one==0, axis=1)]
+    group_two = group_two[~np.all(group_two==0, axis=1)]
+    
+    
+    
+    # Label the left and right leg
+    centroid_one = group_one.mean(0)
+    centroid_two = group_two.mean(0)
+    if(centroid_one[0] > centroid_two[0]):  #group one is the right leg
+        Leg_right = group_one
+        Leg_left = group_two
+    else:
+        Leg_right = group_two
+        Leg_left = group_one
+        
+
+
+
+        
+#    # Debug Plot
+#    # Plot the projected pointcloud 2D image
+#    myMath.plot_points(dataPoints)
+#    # Plot the randomly selected seedPoints
+#    plt.plot(seeds[:, 0], seeds[:, 1], 'r+')
+    
+    # Plot the two left (blue) and right (red) clusters
+#    plt.plot(Leg_right[:, 0], Leg_right[:, 1], 'ro')
+#    plt.plot(Leg_left[:, 0], Leg_left[:, 1], 'bo')
+## 
+##    # Plot the centroid of two legs
+#    plt.plot(Leg_right.mean(0)[0], Leg_right.mean(0)[1], 'b+')
+#    plt.plot(Leg_left.mean(0)[0], Leg_left.mean(0)[1], 'r+')
+
+    
+    
+    return Leg_right, Leg_left
+    
+ 
+
+####################################################
+##           Initialization -                     ##      
+##  Read the video and make ready the pipeline    ##
+###################################################
+
+# Flag setting
+SAVE_IMAGE = False
+IS_DEBUG = False
+
+# fps frame counter initialization
+fpsFrameCnt = 0
+
+
+
+# .bag file location
+#FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\feetTest1.bag"
+FILE_LOC = "D:\\Jen\\Projects\\RealSense Camera\\Recordings\\d415_1500.bag"
+
+
+# Create the context object that holds the handle of all the connected devices
+pipeline = rs.pipeline()
+
+
+# Create the config object and configure the stream
+cfg = rs.config()
+# Tell config that we will use a recorded device from filem to be used by the pipeline through playback.
+rs.config.enable_device_from_file(cfg, FILE_LOC)
+# Configure the pipeline to stream the depth stream (resolution, format, and frame rate)
+#cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+cfg.enable_stream(rs.stream.depth, 640, 360, rs.format.z16, 60)
+
+# Start streaming from file and obtain the returned profile
+profile = pipeline.start(cfg)
+
+
+# Obtain the depth stream profile and camera intrinsics
+depth_profile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
+depth_intrinsics = depth_profile.get_intrinsics()
+
+# Get the width and height of the frame from the camera intrinsics
+w, h = depth_intrinsics.width, depth_intrinsics.height
+
+# Create pointcloud object
+pc = rs.pointcloud()
+
+# Decimate the point cloud
+decimate = rs.decimation_filter()
+decimate.set_option(rs.option.filter_magnitude, 2 ** state.decimate)
+
+# Create realsense colorizer object
+colorizer = rs.colorizer()
+
+
+# Initialize the opencv window
+cv2.namedWindow(state.WIN_NAME, cv2.WINDOW_AUTOSIZE)
+cv2.resizeWindow(state.WIN_NAME, w, h)
+cv2.setMouseCallback(state.WIN_NAME, mouse_cb)
+
+# Create param 'out' to store the frame data
+out = np.empty((h, w, 3), dtype=np.uint8)
+
+
+
+
+
+#############################
+#   Debug                   #
+# Obtain a certain frame    #
+############################
+
+required_frame_number = 0
+for i in range(required_frame_number):
+    frames = pipeline.wait_for_frames()
+    # Get depth frame
+    depth_frame = frames.get_depth_frame()
+        
+    depth_frame = decimate.process(depth_frame)
+        
+    # Grab new intrinsics (may be changed by decimation)
+    depth_intrinsics = rs.video_stream_profile(depth_frame.profile).get_intrinsics()
+    w, h = depth_intrinsics.width, depth_intrinsics.height
+        
+        
+    # Get the depth frame data
+    depth_image = np.asanyarray(depth_frame.get_data())
+    
+        
+    # Get the depth color map
+    depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
+        
+    # Obtain the mapped frame and color_source
+    mapped_frame, color_source = depth_frame, depth_colormap    
+        
+    # Calculate the points from the depth_frame
+    points = pc.calculate(depth_frame)
+    pc.map_to(mapped_frame)
+        
+    # Pointcloud data to numpy array
+    v,t = points.get_vertices(), points.get_texture_coordinates()
+    verts = np.asarray(v).view(np.float32).reshape(-1,3) #xyz
+    texcoords = np.asarray(t).view(np.float32).reshape(-1,2) #uv      
+
+
+
+
+
+
+
+
+
+
+#######################
+#    Stream loop      #
+#######################
+
+
+while True:
+    
+    # Render
+    now = time.time()
+
+    
+    # Grab camera data
+    if not state.paused:
+        
+        # Counter for the frame
+        fpsFrameCnt +=1
+        
+        # Get the frames from pipeline
+        frames = pipeline.wait_for_frames()
+        
+        # Get depth frame
+        depth_frame = frames.get_depth_frame()
+        
+        depth_frame = decimate.process(depth_frame)
+        
+        # Grab new intrinsics (may be changed by decimation)
+        depth_intrinsics = rs.video_stream_profile(depth_frame.profile).get_intrinsics()
+        w, h = depth_intrinsics.width, depth_intrinsics.height
+        
+        
+        # Get the depth frame data
+        depth_image = np.asanyarray(depth_frame.get_data())
+        
+        
+        # Get the depth color map
+        depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
+        
+        # Obtain the mapped frame and color_source
+        mapped_frame, color_source = depth_frame, depth_colormap    
+        
+        # Calculate the points from the depth_frame
+        points = pc.calculate(depth_frame)
+        pc.map_to(mapped_frame)
+        
+        # Pointcloud data to numpy array
+        v,t = points.get_vertices(), points.get_texture_coordinates()
+        verts = np.asarray(v).view(np.float32).reshape(-1,3) #xyz
+        texcoords = np.asarray(t).view(np.float32).reshape(-1,2) #uv
+        
+#        # 2D image display
+#        points2d_x = verts[:, 0]
+#        points2d_y = verts[:, 1]
+#        plt.plot(points2d_x.tolist(), points2d_y.tolist(), 'o')
+
+    
+        
+        ######################################
+        #   Downsample the point cloud       #
+        #     with Voxel Grid Filter         #
+        ######################################
+        
+        # Create a PCL pointcloud
+        oriCloud = pcl.PointCloud(verts)
+    
+     
+        # Starting time for downsampling
+        now = time.time()
+        
+        # Create the Voxel Grid Filter Object
+        vox = oriCloud.make_voxel_grid_filter()
+        # Choose the voxel (leaf) size
+        LEAF_SIZE = 0.005  # unit is in [meter] (also can set 0.043)
+        # Set the voxel size on the vox object
+        vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
+        
+        # Call the voxel_grid_filter to obtain the downsampled cloud, called VGCloud (voxel_grid cloud)
+        vgCloud = vox.filter()  
+        
+        
+        # Downsampling time
+        dt = time.time() - now   
+        
+                    
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the original point cloud
+            print("The size of the original pointcloud: ", oriCloud.size) 
+            # Print process time
+            print("Downsampleing time: %10.9f", dt)
+            # Print the size of the downsampled point cloud
+            print("The size of the downsampled pointcloud: ", vgCloud.size)  
+        
+        
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(oriCloud, "oriCloud.pcd")
+            pcl.save(vgCloud, "vgCloud.pcd")    
+        
+        
+        
+        
+        ###############################
+        #   Apply Passthrough Filter   #
+        #    (crop the image)         #
+        ###############################
+        
+        # Starting time for downsampling
+        now1 = time.time()
+        
+        
+        # Create a passthrough filter object
+        passthrough = vgCloud.make_passthrough_filter()
+            
+        # Assign axis and range to the passthrough filter()
+        FILTER_AXIS = 'z'
+        passthrough.set_filter_field_name(FILTER_AXIS)
+        AXIS_MIN = 0
+        AXIS_MAX = 0.9
+        passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
+            
+        # Call the passthrough filter to obtain the resultant pointcloud
+        ptCloud = passthrough.filter()
+         
+        # Downsampling time
+        dt1 = time.time() - now1 
+    
+    
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the cropped point cloud
+            print("The size of the cropped pointcloud: ", ptCloud.size)
+            # Print process time
+            print("Cropping time: %10.9f", dt1)
+    
+            
+            
+            
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(ptCloud, "passthroughCloud.pcd")
+        
+        
+        
+        
+        ###################################
+        #   Ground Segmentation (remove)  #
+        #          via RANSAC             #
+        ###################################
+        
+        # Starting time for ground segmentation
+        now2 = time.time()
+        
+        # Create the segmentation object
+        seg = ptCloud.make_segmenter()
+    
+        # Set the model you wish to fit
+        seg.set_model_type(pcl.SACMODEL_PLANE)
+        seg.set_method_type(pcl.SAC_RANSAC)
+                           
+        # Max distance for the point to be consider fitting this model
+        max_distance = 0.010
+        seg.set_distance_threshold(max_distance)
+    
+        # Obtain a set of inlier indices ( who fit the plane) and model coefficients
+        inliers, coefficients = seg.segment()
+        
+        # Extract Inliers obtained from previous step
+        gdRemovedCloud = ptCloud.extract(inliers, negative=True)
+    
+        # Ground segmentation time
+        dt2 = time.time() - now2
+        
+       
+        
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the ground removed point cloud
+            print("The size of the ground removed pointcloud: ", gdRemovedCloud.size)
+            # Print process time
+            print("Ground segmentation time: %10.9f", dt2)
+           
+        
+        
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(gdRemovedCloud, "gdRemovedCloud.pcd")
+        
+        
+        
+        
+        #################################
+        #   Outlier removal Filter-     #
+        #  Statistical Outlier Removal  #
+        #################################
+        
+        # Starting time for outlier removal 
+        now3 = time.time()
+        
+        
+        # Create a statistical outlier filter object
+        outlier = gdRemovedCloud.make_statistical_outlier_filter()
+    
+        # Set the number of neighboring points to analyze for any given point
+        outlier.set_mean_k(10)
+        
+        # Set threshold scale factor
+        outlier_threshold = 0.01
+    
+        # Eliminate the points whose mean distance is larger than global
+        # (global dis = mean_dis + threshold * std_dev)               
+        outlier.set_std_dev_mul_thresh(outlier_threshold)
+    
+        # Apply the statistical outlier removal filter
+        olRemovedCloud = outlier.filter()
+    
+        # Outlier removal time
+        dt3 = time.time() - now3
+        
+        
+        # Debug
+        if IS_DEBUG:
+            # Print the size of the ground removed point cloud
+            print("The size of the outlier removed pointcloud: ", olRemovedCloud.size)   
+            # Print process time
+            print("Outlier removal time: %10.9f", dt3)
+    
+    
+        # Save the image for visualization
+        if SAVE_IMAGE:
+            pcl.save(olRemovedCloud, "outlierRemovedCloud.pcd")
+        
+        
+        
+
+        
+        
+        
+        
+        ###################################
+        #    Segment left/right leg   #
+        ###################################
+        # Hough Transform
+        # cylinders = cv2.HoughCylinders()
+        
+        
+        # --> unable to segment via RANSAC (maybe because there are two cylinders)
+#        # Create the segmentation object
+#        seg_leg = olRemovedCloud.make_segmenter()
+#    
+#        # Set the model you wish to fit
+#        seg_leg.set_model_type(pcl.SACMODEL_CYLINDER)
+#        seg_leg.set_method_type(pcl.SAC_RANSAC)
+#        
+#        # Set the threshold value
+#        max_distance = 100
+#        seg_leg.set_distance_threshold(max_distance)
+#        
+#        # Obtain a set of inlier indices ( who fit the plane) and model coefficients
+#        inliers_leg, coefficients = seg_leg.segment()
+#        
+#        # Extract Inliers obtained from previous step
+#        LegRemovedCloud = ptCloud.extract(inliers_leg, negative=False)
+  
+
+        ##################################
+        #     Conver the pcl pointcloud  #
+        #    object to numpy array type  #
+        ##################################               
+        
+        # Convert the pcl pointcloud object to array type
+        displayCloud = olRemovedCloud
+        #displayCloud = LegRemovedCloud
+        display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
+        verts = display_verts
+        
+        # Extimate the image width and height
+        #w, h, image_2d = myMath.forced_project_to_2Dimage(verts)
+        
+        
+        ############################
+        ## Floodfill Clustering    #
+        #   Find right/left leg    #
+        ###########################
+        
+        
+        # Floodfill from opencv
+        Leg_right, Leg_left = floodfillClassifier(verts, 3, 3)
+        
+#        #  Convert one of the leg to verts for tmp visualization
+#        verts_leg_left = Leg_left.astype(np.float32)
+#        verts = verts_leg_left
+        
+        verts_leg_right = Leg_right.astype(np.float32)
+        verts = verts_leg_right
+        
+            
+        
+        
+        
+
+        
+
+        
+        
+        
+        #########################
+        #  K-Mean Clustering   #
+        ########################
+#        # Implement k-mean for classification --> not accurate enough
+#        init_idx = [verts.shape[0] / 2 - 150, verts.shape[0] / 2 + 150]
+##        init_idx = [10  , verts.shape[0] - 50]
+#        init_idx = np.array(init_idx)
+#        init = np.array([verts[init_idx[0], :], verts[init_idx[1], :]])
+#        k_means = KMeans(n_clusters=2, max_iter=10000, random_state=0, init = init)
+#        k_means.fit(verts)
+#        label = k_means.labels_
+        
+#        # Implement minibatch k-means --> same as k-mean
+#        mbk = MiniBatchKMeans(n_clusters = 2)
+#        mbk.fit(verts)
+#        label = mbk.labels_
+#        centers = mbk.cluster_centers_
+        
+        
+        
+        
+        
+        ##############################
+        # Point Cloud Visuzalization #
+        ##############################
+        
+        
+#    # Draw k-mean initial guess point
+#    #    p0 = tuple([verts[init_idx[0], :]])
+#    #    p1 = tuple([verts[init_idx[1], :]])
+#    p0 = verts[init_idx[0], :]
+#    p1 = verts[init_idx[1], :]
+#    #color = (0, 0, 255)
+#    pointcloudViewer.line3d_exa(out, p0, p1,  thickness=50)
+        
+        
+        
+        
+    # Remove the points which below to group 1 to visualize the clustering result
+#    for idx, val in enumerate (label):
+#        if val == 1:
+#            verts[idx, :] = np.zeros(3)
+
+    
+    
+    else: # If it is paused
+        if state.per_frame: # Start frame by frame 
+            
+            # Counter for the frame
+            fpsFrameCnt +=1
+            
+            # Get the frames from pipeline
+            frames = pipeline.wait_for_frames()
+            
+            # Get depth frame
+            depth_frame = frames.get_depth_frame()
+            
+            depth_frame = decimate.process(depth_frame)
+            
+            # Grab new intrinsics (may be changed by decimation)
+            depth_intrinsics = rs.video_stream_profile(depth_frame.profile).get_intrinsics()
+            w, h = depth_intrinsics.width, depth_intrinsics.height
+            
+            
+            # Get the depth frame data
+            depth_image = np.asanyarray(depth_frame.get_data())
+            
+            
+            # Get the depth color map
+            depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
+            
+            # Obtain the mapped frame and color_source
+            mapped_frame, color_source = depth_frame, depth_colormap    
+            
+            # Calculate the points from the depth_frame
+            points = pc.calculate(depth_frame)
+            pc.map_to(mapped_frame)
+            
+            # Pointcloud data to numpy array
+            v,t = points.get_vertices(), points.get_texture_coordinates()
+            verts = np.asarray(v).view(np.float32).reshape(-1,3) #xyz
+            texcoords = np.asarray(t).view(np.float32).reshape(-1,2) #uv
+            
+            
+            ######################
+            #   Image Processing #
+            ######################
+            
+            # Create a PCL pointcloud
+            oriCloud = pcl.PointCloud(verts)
+        
+         
+            # Starting time for downsampling
+            now = time.time()
+            
+            # Create the Voxel Grid Filter Object
+            vox = oriCloud.make_voxel_grid_filter()
+            # Choose the voxel (leaf) size
+            LEAF_SIZE = 0.005  # unit is in [meter] (also can set 0.043)
+            # Set the voxel size on the vox object
+            vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
+            
+            # Call the voxel_grid_filter to obtain the downsampled cloud, called VGCloud (voxel_grid cloud)
+            vgCloud = vox.filter()  
+            
+            # Create a passthrough filter object
+            passthrough = vgCloud.make_passthrough_filter()
+                
+            # Assign axis and range to the passthrough filter()
+            FILTER_AXIS = 'z'
+            passthrough.set_filter_field_name(FILTER_AXIS)
+            AXIS_MIN = 0
+            AXIS_MAX = 0.9
+            passthrough.set_filter_limits(AXIS_MIN, AXIS_MAX)
+                
+            # Call the passthrough filter to obtain the resultant pointcloud
+            ptCloud = passthrough.filter()
+            
+            # Starting time for ground segmentation
+            now2 = time.time()
+            
+            # Create the segmentation object
+            seg = ptCloud.make_segmenter()
+        
+            # Set the model you wish to fit
+            seg.set_model_type(pcl.SACMODEL_PLANE)
+            seg.set_method_type(pcl.SAC_RANSAC)
+                               
+            # Max distance for the point to be consider fitting this model
+            max_distance = 0.010
+            seg.set_distance_threshold(max_distance)
+        
+            # Obtain a set of inlier indices ( who fit the plane) and model coefficients
+            inliers, coefficients = seg.segment()
+            
+            # Extract Inliers obtained from previous step
+            gdRemovedCloud = ptCloud.extract(inliers, negative=True)
+            
+            # Create a statistical outlier filter object
+            outlier = gdRemovedCloud.make_statistical_outlier_filter()
+        
+            # Set the number of neighboring points to analyze for any given point
+            outlier.set_mean_k(10)
+            
+            # Set threshold scale factor
+            outlier_threshold = 0.01
+        
+            # Eliminate the points whose mean distance is larger than global
+            # (global dis = mean_dis + threshold * std_dev)               
+            outlier.set_std_dev_mul_thresh(outlier_threshold)
+        
+            # Apply the statistical outlier removal filter
+            olRemovedCloud = outlier.filter()
+            
+            
+            # Convert the pcl pointcloud object to array type
+            displayCloud = olRemovedCloud
+            #displayCloud = LegRemovedCloud
+            display_verts = np.asarray(displayCloud).view(np.float32).reshape(-1,3) #xyz
+            verts = display_verts
+    
+            
+            # Floodfill from opencv
+            Leg_right, Leg_left = floodfillClassifier(verts, 3, 3)
+            
+    #        #  Convert one of the leg to verts for tmp visualization
+    #        verts_leg_left = Leg_left.astype(np.float32)
+    #        verts = verts_leg_left
+            
+            verts_leg_right = Leg_right.astype(np.float32)
+            verts = verts_leg_right
+            
+            # Stop the processing 
+            state.per_frame = False
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+
+    
+    
+
+    out.fill(0)
+    
+    pointcloudViewer.grid(state, out, (0, 0.5, 1), size=1, n=10)
+    pointcloudViewer.frustum(state, out, depth_intrinsics)
+    pointcloudViewer.axes(out, pointcloudViewer.view(state, [0, 0, 0]), state.rotation, size=0.1, thickness=1)
+
+    if not state.scale or out.shape[:2] == (h, w):
+        pointcloudViewer.pointcloud(state, out, verts, texcoords, color_source)
+    else:
+        tmp = np.zeros((h, w, 3), dtype=np.uint8)
+        pointcloudViewer.pointcloud(state, tmp, verts, texcoords, color_source)
+        tmp = cv2.resize(
+            tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
+        np.putmask(out, tmp > 0, tmp)
+
+    if any(state.mouse_btns):
+        pointcloudViewer.axes(out, pointcloudViewer.view(state, state.pivot), state.rotation, thickness=4)
+
+    dt = time.time() - now
+
+    cv2.setWindowTitle(
+        state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) frame:%d  %s" %
+        (w, h, 1.0/dt, dt*1000, fpsFrameCnt, "PAUSED" if state.paused else ""))
+
+    cv2.imshow(state.WIN_NAME, out)
+    key = cv2.waitKey(1) # display the frame for 1ms and close it
+
+    if key == ord("r"):
+        state.reset()
+
+    if key == ord("p"):
+        state.paused ^= True
+
+    if key == ord("d"):
+        state.decimate = (state.decimate + 1) % 3
+        decimate.set_option(rs.option.filter_magnitude, 2 ** state.decimate)
+
+    if key == ord("z"):
+        state.scale ^= True
+
+    if key == ord("c"):
+        state.color ^= True
+
+    if key == ord("s"):
+        cv2.imwrite('./out.png', out)
+    
+    if key == ord("a"):
+        state.per_frame = True
+        print("a pressed.")
+
+    if key == ord("e"):
+        points.export_to_ply('./out.ply', mapped_frame)
+
+    if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
+        break   
+        
+        
+        
+        
+        
+        
+# Stop streaming
+pipeline.stop()
