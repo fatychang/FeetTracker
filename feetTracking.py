@@ -428,12 +428,12 @@ for i in range(required_frame_number):
 
 while True:
     
-    # Render
-    now = time.time()
-
-    
+   
     # Grab camera data
     if not state.paused:
+        
+        # Render
+        now = time.time()
         
         # Counter for the frame
         fpsFrameCnt +=1
@@ -487,7 +487,7 @@ while True:
     
      
         # Starting time for downsampling
-        now = time.time()
+        #now = time.time()
         
         # Create the Voxel Grid Filter Object
         vox = oriCloud.make_voxel_grid_filter()
@@ -501,7 +501,7 @@ while True:
         
         
         # Downsampling time
-        dt = time.time() - now   
+        #dt = time.time() - now   
         
                     
         # Debug
@@ -771,6 +771,8 @@ while True:
     else: # If it is paused
         if state.per_frame: # Start frame by frame 
             
+            now = time.time()
+            
             # Counter for the frame
             fpsFrameCnt +=1
             
@@ -814,9 +816,7 @@ while True:
             # Create a PCL pointcloud
             oriCloud = pcl.PointCloud(verts)
         
-         
-            # Starting time for downsampling
-            now = time.time()
+        
             
             # Create the Voxel Grid Filter Object
             vox = oriCloud.make_voxel_grid_filter()
@@ -840,9 +840,6 @@ while True:
                 
             # Call the passthrough filter to obtain the resultant pointcloud
             ptCloud = passthrough.filter()
-            
-            # Starting time for ground segmentation
-            now2 = time.time()
             
             # Create the segmentation object
             seg = ptCloud.make_segmenter()
